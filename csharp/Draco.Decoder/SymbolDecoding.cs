@@ -27,53 +27,94 @@ public static class SymbolDecoding
         if (numValues == 0)
             return true;
         
+        Console.WriteLine($"[SymbolDecoding.DecodeSymbols] Starting, numValues={numValues}, numComponents={numComponents}, buffer position: {buffer.DecodedSize}");
+        
         if (!buffer.Decode(out byte scheme))
+        {
+            Console.WriteLine($"[SymbolDecoding.DecodeSymbols] Failed to read scheme byte");
             return false;
+        }
+        
+        Console.WriteLine($"[SymbolDecoding.DecodeSymbols] scheme={scheme}");
         
         if (scheme == (byte)SymbolCodingMethod.Tagged)
         {
+            Console.WriteLine($"[SymbolDecoding.DecodeSymbols] Using Tagged decoding");
             return DecodeTaggedSymbols(numValues, numComponents, buffer, outValues);
         }
         else if (scheme == (byte)SymbolCodingMethod.Raw)
         {
+            Console.WriteLine($"[SymbolDecoding.DecodeSymbols] Using Raw decoding");
             return DecodeRawSymbols(numValues, buffer, outValues);
         }
         
+        Console.WriteLine($"[SymbolDecoding.DecodeSymbols] Unknown scheme: {scheme}");
         return false;
     }
     
     private static bool DecodeTaggedSymbols(uint numValues, int numComponents, DecoderBuffer buffer, uint[] outValues)
     {
+        Console.WriteLine($"[DecodeTaggedSymbols] Starting, buffer position: {buffer.DecodedSize}");
+        
         var tagDecoder = new RAnsSymbolDecoder(5);
+        Console.WriteLine($"[DecodeTaggedSymbols] Created RAnsSymbolDecoder with maxBitLength=5");
+        
         if (!tagDecoder.Create(buffer))
+        {
+            Console.WriteLine($"[DecodeTaggedSymbols] tagDecoder.Create failed at buffer position: {buffer.DecodedSize}");
             return false;
+        }
+        
+        Console.WriteLine($"[DecodeTaggedSymbols] tagDecoder.Create succeeded, buffer position: {buffer.DecodedSize}");
         
         if (!tagDecoder.StartDecoding(buffer))
+        {
+            Console.WriteLine($"[DecodeTaggedSymbols] tagDecoder.StartDecoding failed at buffer position: {buffer.DecodedSize}");
             return false;
+        }
+        
+        Console.WriteLine($"[DecodeTaggedSymbols] tagDecoder.StartDecoding succeeded, NumSymbols={tagDecoder.NumSymbols}, buffer position: {buffer.DecodedSize}");
         
         if (numValues > 0 && tagDecoder.NumSymbols == 0)
+        {
+            Console.WriteLine($"[DecodeTaggedSymbols] NumSymbols is 0 but numValues={numValues}");
             return false;
+        }
         
         if (!buffer.StartBitDecoding(false, out ulong _))
+        {
+            Console.WriteLine($"[DecodeTaggedSymbols] StartBitDecoding failed");
             return false;
+        }
+        
+        Console.WriteLine($"[DecodeTaggedSymbols] StartBitDecoding succeeded, buffer position: {buffer.DecodedSize}");
         
         int valueId = 0;
         for (uint i = 0; i < numValues; i += (uint)numComponents)
         {
             uint bitLength = tagDecoder.DecodeSymbol();
             
+            if (i < 3)
+                Console.WriteLine($"[DecodeTaggedSymbols] Iteration {i}: bitLength={bitLength}");
+            
             for (int j = 0; j < numComponents; j++)
             {
                 if (!buffer.DecodeLeastSignificantBits32((int)bitLength, out uint val))
+                {
+                    Console.WriteLine($"[DecodeTaggedSymbols] DecodeLeastSignificantBits32 failed at valueId={valueId}, iteration={i}, component={j}");
                     return false;
+                }
                 
                 outValues[valueId++] = val;
             }
         }
         
+        Console.WriteLine($"[DecodeTaggedSymbols] Decoded all {valueId} values successfully");
+        
         tagDecoder.EndDecoding();
         buffer.EndBitDecoding();
         
+        Console.WriteLine($"[DecodeTaggedSymbols] Success, buffer position: {buffer.DecodedSize}");
         return true;
     }
     

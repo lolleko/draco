@@ -44,16 +44,27 @@ public class RAnsSymbolDecoder
     public bool Create(DecoderBuffer buffer)
     {
         if (!VarintDecoding.DecodeVarint(buffer, out numSymbols))
+        {
+            Console.WriteLine($"[RAnsSymbolDecoder.Create] Failed to decode numSymbols varint");
             return false;
+        }
+        
+        Console.WriteLine($"[RAnsSymbolDecoder.Create] numSymbols={numSymbols}, buffer position: {buffer.DecodedSize}");
         
         if (numSymbols / 64 > buffer.RemainingSize)
+        {
+            Console.WriteLine($"[RAnsSymbolDecoder.Create] numSymbols too large");
             return false;
+        }
         
         probabilityTable = new uint[numSymbols];
         cumulativeProbabilities = new uint[numSymbols];
         
         if (numSymbols == 0)
+        {
+            Console.WriteLine($"[RAnsSymbolDecoder.Create] numSymbols==0, returning true");
             return true;
+        }
         
         for (uint i = 0; i < numSymbols; i++)
         {
@@ -87,6 +98,7 @@ public class RAnsSymbolDecoder
             }
         }
         
+        Console.WriteLine($"[RAnsSymbolDecoder.Create] Calling BuildLookupTable, buffer position: {buffer.DecodedSize}");
         return BuildLookupTable();
     }
     
@@ -123,20 +135,37 @@ public class RAnsSymbolDecoder
     
     public bool StartDecoding(DecoderBuffer buffer)
     {
+        Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] Starting, buffer position: {buffer.DecodedSize}");
+        
         if (!VarintDecoding.DecodeVarint(buffer, out ulong bytesEncoded))
+        {
+            Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] Failed to decode bytesEncoded varint");
             return false;
+        }
+        
+        Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] bytesEncoded={bytesEncoded}, buffer.RemainingSize={buffer.RemainingSize}, buffer position: {buffer.DecodedSize}");
         
         if (bytesEncoded > (ulong)buffer.RemainingSize)
+        {
+            Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] bytesEncoded > RemainingSize");
             return false;
+        }
         
         this.buffer = buffer.GetDataAtCurrentPosition();
         int offset = (int)bytesEncoded;
         
+        Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] offset={offset}");
+        
         if (offset < 1)
+        {
+            Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] offset < 1");
             return false;
+        }
         
         byte lastByte = this.buffer[offset - 1];
         uint x = (uint)(lastByte >> 6);
+        
+        Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] lastByte=0x{lastByte:X2}, x={x}");
         
         if (x == 0)
         {
@@ -146,28 +175,41 @@ public class RAnsSymbolDecoder
         else if (x == 1)
         {
             if (offset < 2)
+            {
+                Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] x==1 but offset < 2");
                 return false;
+            }
             bufferOffset = offset - 2;
             state = (uint)(((this.buffer[offset - 1] & 0xFF) | ((this.buffer[offset - 2] & 0xFF) << 8)) & 0x3FFF);
         }
         else if (x == 2)
         {
             if (offset < 3)
+            {
+                Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] x==2 but offset < 3");
                 return false;
+            }
             bufferOffset = offset - 3;
             state = (uint)(((this.buffer[offset - 1] & 0xFF) | ((this.buffer[offset - 2] & 0xFF) << 8) | ((this.buffer[offset - 3] & 0xFF) << 16)) & 0x3FFFFF);
         }
         else
         {
+            Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] Invalid x value: {x}");
             return false;
         }
         
         state += RANS_L;
+        Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] state after adding RANS_L: {state}");
+        
         if (state >= RANS_L * 256)
+        {
+            Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] state >= RANS_L * 256");
             return false;
+        }
         
         buffer.Advance((int)bytesEncoded);
         
+        Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] Success, buffer position after advance: {buffer.DecodedSize}");
         return true;
     }
     
