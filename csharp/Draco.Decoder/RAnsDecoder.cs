@@ -123,8 +123,7 @@ public class RAnsSymbolDecoder
             cumulativeProbabilities[i] = cumulativeProb;
             cumulativeProb += prob;
             
-            if (i < 10)
-                Console.WriteLine($"[BuildLookupTable] Symbol {i}: prob={prob}, cumulativeProb={cumulativeProb}");
+            Console.WriteLine($"[BuildLookupTable] Symbol {i}: prob={prob}, cumulativeProb={cumulativeProb}");
             
             if (cumulativeProb > (uint)precision)
             {
@@ -209,7 +208,7 @@ public class RAnsSymbolDecoder
                 return false;
             }
             bufferOffset = offset - 2;
-            state = (uint)(((this.buffer[offset - 1] & 0xFF) | ((this.buffer[offset - 2] & 0xFF) << 8)) & 0x3FFF);
+            state = (uint)((lastByte & 0x3F) | ((this.buffer[offset - 2] & 0xFF) << 6));
         }
         else if (x == 2)
         {
@@ -219,7 +218,8 @@ public class RAnsSymbolDecoder
                 return false;
             }
             bufferOffset = offset - 3;
-            state = (uint)(((this.buffer[offset - 1] & 0xFF) | ((this.buffer[offset - 2] & 0xFF) << 8) | ((this.buffer[offset - 3] & 0xFF) << 16)) & 0x3FFFFF);
+            state = (uint)((lastByte & 0x3F) | ((this.buffer[offset - 2] & 0xFF) << 6) | ((this.buffer[offset - 3] & 0xFF) << 14));
+            Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] state before adding RANS_L: {state}, bytes: 0x{this.buffer[offset-3]:X2} 0x{this.buffer[offset-2]:X2} 0x{lastByte:X2}");
         }
         else
         {
