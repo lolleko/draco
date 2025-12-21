@@ -18,7 +18,7 @@ public class DracoDecoder
 {
     private const string DracoMagic = "DRACO";
     private const byte MajorVersion = 2;
-    private const byte MinorVersion = 2;
+    private const byte MinorVersion = 3;
 
     public static StatusOr<EncodedGeometryType> GetEncodedGeometryType(DecoderBuffer buffer)
     {
