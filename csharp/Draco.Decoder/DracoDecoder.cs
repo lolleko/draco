@@ -201,14 +201,13 @@ public class DracoDecoder
             pointCloud.AddAttribute(attribute);
         }
         
-        // Now decode each attribute's encoder type and data
+        // Phase 1: Read all encoder types and create decoders
+        var decoders = new SequentialAttributeDecoder[pointCloud.NumAttributes];
         for (int attId = 0; attId < pointCloud.NumAttributes; attId++)
         {
-            Console.WriteLine($"[DecodeAttributeData] Decoding attribute {attId}");
-            
             var attribute = pointCloud.GetAttribute(attId);
             if (attribute == null)
-                continue;
+                return Status.IoError($"Attribute {attId} is null");
 
             if (!buffer.Decode(out byte encoderType))
                 return Status.IoError($"Failed to read encoder type for attribute {attId}");
@@ -228,31 +227,47 @@ public class DracoDecoder
                 case 2: // SEQUENTIAL_ATTRIBUTE_ENCODER_QUANTIZATION
                     decoder = new SequentialQuantizationAttributeDecoder();
                     break;
+                case 3: // SEQUENTIAL_ATTRIBUTE_ENCODER_NORMALS
+                    decoder = new SequentialNormalAttributeDecoder();
+                    break;
                 default:
                     return Status.DracoError($"Unsupported encoder type: {encoderType}");
             }
 
             decoder.SetAttribute(attribute);
+            decoders[attId] = decoder;
+        }
+        
+        // Phase 2: Decode portable attributes for all decoders
+        for (int attId = 0; attId < pointCloud.NumAttributes; attId++)
+        {
+            Console.WriteLine($"[DecodeAttributeData] Decoding portable attribute {attId}, buffer position: {buffer.DecodedSize}");
             
-            Console.WriteLine($"[DecodeAttributeData] Calling DecodePortableAttribute for attribute {attId}");
-            
-            if (!decoder.DecodePortableAttribute(pointCloud.NumPoints, buffer))
+            if (!decoders[attId].DecodePortableAttribute(pointCloud.NumPoints, buffer))
             {
                 Console.WriteLine($"[DecodeAttributeData] DecodePortableAttribute failed at buffer position {buffer.DecodedSize}");
                 return Status.IoError($"Failed to decode portable attribute {attId}");
             }
+        }
+        
+        // Phase 3: Decode transform data for all decoders
+        for (int attId = 0; attId < pointCloud.NumAttributes; attId++)
+        {
+            Console.WriteLine($"[DecodeAttributeData] Decoding transform data for attribute {attId}, buffer position: {buffer.DecodedSize}");
             
-            Console.WriteLine($"[DecodeAttributeData] Successfully decoded attribute {attId}, calling DecodeDataNeededByPortableTransform");
-            
-            if (!decoder.DecodeDataNeededByPortableTransform(buffer))
+            if (!decoders[attId].DecodeDataNeededByPortableTransform(buffer))
             {
                 Console.WriteLine($"[DecodeAttributeData] DecodeDataNeededByPortableTransform failed");
                 return Status.IoError($"Failed to decode transform data for attribute {attId}");
             }
+        }
+        
+        // Phase 4: Transform all attributes to original format
+        for (int attId = 0; attId < pointCloud.NumAttributes; attId++)
+        {
+            Console.WriteLine($"[DecodeAttributeData] Transforming attribute {attId}");
             
-            Console.WriteLine($"[DecodeAttributeData] Calling TransformAttributeToOriginalFormat");
-            
-            if (!decoder.TransformAttributeToOriginalFormat(pointCloud.NumPoints))
+            if (!decoders[attId].TransformAttributeToOriginalFormat(pointCloud.NumPoints))
             {
                 Console.WriteLine($"[DecodeAttributeData] TransformAttributeToOriginalFormat failed");
                 return Status.IoError($"Failed to transform attribute {attId}");
