@@ -29,10 +29,11 @@ public enum PredictionSchemeMethod : byte
 public enum PredictionSchemeTransformType : sbyte
 {
     None = -1,
-    Wrap = 0,
-    NormalOctahedron = 1,
-    NormalOctahedronCanonicalized = 2,
-    Count = 3
+    Delta = 0,
+    Wrap = 1,
+    NormalOctahedron = 2,
+    NormalOctahedronCanonicalized = 3,
+    Count = 4
 }
 
 public class SequentialAttributeDecoder
@@ -149,7 +150,7 @@ public class SequentialIntegerAttributeDecoder : SequentialAttributeDecoder
     private IPredictionSchemeDecoder CreatePredictionScheme(
         PredictionSchemeMethod method, PredictionSchemeTransformType transformType)
     {
-        if (transformType == PredictionSchemeTransformType.Wrap)
+        if (transformType == PredictionSchemeTransformType.Wrap || transformType == PredictionSchemeTransformType.Delta)
         {
             if (method == PredictionSchemeMethod.Difference)
             {

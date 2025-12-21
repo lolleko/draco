@@ -106,54 +106,17 @@ public class DracoDecoder
 
         pointCloud.NumPoints = (int)numPoints;
         
+        Console.WriteLine($"[DecodePointCloudInternal] numPoints={numPoints}, buffer position: {buffer.DecodedSize}");
+        
         if (!buffer.Decode(out byte numAttributesDecoders))
             return Status.IoError("Failed to read number of attributes decoders");
+        
+        Console.WriteLine($"[DecodePointCloudInternal] numAttributesDecoders={numAttributesDecoders}, buffer position: {buffer.DecodedSize}");
         
         if (numAttributesDecoders != 1)
             return Status.DracoError($"Only single attributes decoder supported, got {numAttributesDecoders}");
 
-        uint numAttributes;
-        if (buffer.BitstreamVersion < 0x0200)
-        {
-            if (!buffer.Decode(out numAttributes))
-                return Status.IoError("Failed to read number of attributes (u32)");
-        }
-        else
-        {
-            if (!VarintDecoding.DecodeVarint(buffer, out numAttributes))
-                return Status.IoError("Failed to read number of attributes (varint)");
-        }
-        
-        if (numAttributes == 0 || numAttributes > 100)
-            return Status.IoError($"Invalid number of attributes: {numAttributes}");
-
-        for (int i = 0; i < numAttributes; i++)
-        {
-            var attribute = new PointAttribute();
-            
-            if (!buffer.Decode(out byte attributeType))
-                return Status.IoError($"Failed to read attribute type for attribute {i}");
-            
-            if (!buffer.Decode(out byte dataType))
-                return Status.IoError($"Failed to read data type for attribute {i}");
-            
-            if (!buffer.Decode(out byte numComponents))
-                return Status.IoError($"Failed to read num components for attribute {i}");
-            
-            if (!buffer.Decode(out byte normalized))
-                return Status.IoError($"Failed to read normalized for attribute {i}");
-
-            attribute.AttributeType = (GeometryAttributeType)attributeType;
-            attribute.DataType = (DataType)dataType;
-            attribute.NumComponents = numComponents;
-            attribute.UniqueId = i;
-
-            attribute.Init(attribute.AttributeType, attribute.DataType, 
-                          attribute.NumComponents, pointCloud.NumPoints);
-
-            pointCloud.AddAttribute(attribute);
-        }
-
+        // Attribute metadata will be read in DecodeAttributeData
         return DecodeAttributeData(buffer, pointCloud);
     }
 
@@ -175,6 +138,70 @@ public class DracoDecoder
     {
         Console.WriteLine($"[DecodeAttributeData] Starting, buffer position: {buffer.DecodedSize}");
         
+        // First, read attribute metadata (this is DecodeAttributesDecoderData in C++)
+        uint numAttributes;
+        if (buffer.BitstreamVersion < 0x0200)
+        {
+            if (!buffer.Decode(out numAttributes))
+                return Status.IoError("Failed to read number of attributes (u32)");
+        }
+        else
+        {
+            if (!VarintDecoding.DecodeVarint(buffer, out numAttributes))
+                return Status.IoError("Failed to read number of attributes (varint)");
+        }
+        
+        Console.WriteLine($"[DecodeAttributeData] numAttributes={numAttributes}, buffer position: {buffer.DecodedSize}");
+        
+        if (numAttributes == 0 || numAttributes > 100)
+            return Status.IoError($"Invalid number of attributes: {numAttributes}");
+
+        // Read attribute descriptors and create attributes
+        for (int i = 0; i < numAttributes; i++)
+        {
+            var attribute = new PointAttribute();
+            
+            if (!buffer.Decode(out byte attributeType))
+                return Status.IoError($"Failed to read attribute type for attribute {i}");
+            
+            if (!buffer.Decode(out byte dataType))
+                return Status.IoError($"Failed to read data type for attribute {i}");
+            
+            if (!buffer.Decode(out byte numComponents))
+                return Status.IoError($"Failed to read num components for attribute {i}");
+            
+            if (!buffer.Decode(out byte normalized))
+                return Status.IoError($"Failed to read normalized for attribute {i}");
+            
+            // For bitstream versions < 1.3, read custom_id (uint16)
+            ushort customId = (ushort)i;
+            if (buffer.BitstreamVersion < 0x0103)
+            {
+                if (!buffer.Decode(out customId))
+                    return Status.IoError($"Failed to read custom_id for attribute {i}");
+            }
+            else
+            {
+                // For versions >= 1.3, read unique_id as varint
+                if (!VarintDecoding.DecodeVarint(buffer, out uint uniqueId))
+                    return Status.IoError($"Failed to read unique_id for attribute {i}");
+                customId = (ushort)uniqueId;
+            }
+
+            Console.WriteLine($"[DecodeAttributeData] Attribute {i}: type={attributeType}, dataType={dataType}, numComponents={numComponents}, normalized={normalized}, customId={customId}, buffer position: {buffer.DecodedSize}");
+
+            attribute.AttributeType = (GeometryAttributeType)attributeType;
+            attribute.DataType = (DataType)dataType;
+            attribute.NumComponents = numComponents;
+            attribute.UniqueId = customId;
+
+            attribute.Init(attribute.AttributeType, attribute.DataType, 
+                          attribute.NumComponents, pointCloud.NumPoints);
+
+            pointCloud.AddAttribute(attribute);
+        }
+        
+        // Now decode each attribute's encoder type and data
         for (int attId = 0; attId < pointCloud.NumAttributes; attId++)
         {
             Console.WriteLine($"[DecodeAttributeData] Decoding attribute {attId}");
