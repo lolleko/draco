@@ -86,6 +86,13 @@ public class DecoderBuffer
     public void StartDecodingFrom(int offset) => position = offset;
 
     public ReadOnlySpan<byte> DataHead() => data.AsSpan(position);
+    
+    public byte[] GetDataAtCurrentPosition()
+    {
+        var result = new byte[RemainingSize];
+        Array.Copy(data, position, result, 0, RemainingSize);
+        return result;
+    }
 
     public bool StartBitDecoding(bool decodeSize, out ulong outSize)
     {

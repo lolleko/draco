@@ -38,6 +38,28 @@ public static class VarintDecoding
         return true;
     }
     
+    public static bool DecodeVarint(DecoderBuffer buffer, out ulong value)
+    {
+        value = 0;
+        byte b;
+        int shift = 0;
+        
+        do
+        {
+            if (!buffer.Decode(out b))
+                return false;
+            
+            value |= (ulong)(b & 0x7F) << shift;
+            shift += 7;
+            
+            if (shift > 70)
+                return false;
+                
+        } while ((b & 0x80) != 0);
+        
+        return true;
+    }
+    
     public static bool DecodeVarintSigned(DecoderBuffer buffer, out int value)
     {
         if (!DecodeVarint(buffer, out uint uvalue))

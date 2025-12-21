@@ -212,30 +212,16 @@ public class SequentialIntegerAttributeDecoder : SequentialAttributeDecoder
     
     private bool DecodeSymbols(uint numValues, int numComponents, DecoderBuffer buffer, int[] outValues)
     {
-        if (!VarintDecoding.DecodeVarint(buffer, out uint maxValue))
+        var uintValues = new uint[numValues];
+        if (!SymbolDecoding.DecodeSymbols(numValues, numComponents, buffer, uintValues))
             return false;
         
-        if (maxValue == 0)
+        for (int i = 0; i < numValues; i++)
         {
-            Array.Clear(outValues, 0, outValues.Length);
-            return true;
+            outValues[i] = (int)uintValues[i];
         }
         
-        if (!buffer.Decode(out byte schemeMethod))
-            return false;
-        
-        if (schemeMethod == 0)
-        {
-            for (int i = 0; i < numValues; i++)
-            {
-                if (!VarintDecoding.DecodeVarint(buffer, out uint val))
-                    return false;
-                outValues[i] = (int)val;
-            }
-            return true;
-        }
-        
-        return false;
+        return true;
     }
     
     private void ConvertSymbolsToSignedInts(int[] values)

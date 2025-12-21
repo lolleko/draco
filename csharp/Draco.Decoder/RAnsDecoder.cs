@@ -16,89 +16,155 @@ namespace Draco.Decoder;
 
 public class RAnsSymbolDecoder
 {
-    private uint prob;
-    private uint cumulProb;
-    
-    public uint Probability => prob;
-    public uint CumulativeProbability => cumulProb;
-    
-    public bool Decode(uint precisionBits, ReadOnlySpan<byte> data, ref int offset)
-    {
-        uint precision = 1u << (int)precisionBits;
-        
-        if (offset + 1 > data.Length)
-            return false;
-            
-        prob = data[offset++];
-        
-        if (prob == 0 || prob > precision)
-            return false;
-        
-        if (offset >= data.Length)
-            return false;
-            
-        cumulProb = data[offset++];
-        
-        if (cumulProb >= precision)
-            return false;
-        
-        return true;
-    }
-}
-
-public class RAnsDecoder
-{
-    private const uint RAnsL = 4096;
-    private const uint RAnsPrecision = 12;
+    private uint[] probabilityTable;
+    private uint[] lookupTable;
+    private uint numSymbols;
+    private int precisionBits;
+    private int precision;
     
     private uint state;
-    private readonly byte[] buffer;
+    private byte[] buffer;
     private int bufferOffset;
+    private const uint RANS_L = 4096;
     
-    public RAnsDecoder(byte[] inputBuffer, int startOffset = 0)
+    public uint NumSymbols => numSymbols;
+    
+    public RAnsSymbolDecoder(int uniqueSymbolsBitLength)
     {
-        buffer = inputBuffer;
-        bufferOffset = startOffset;
-        state = 0;
+        precisionBits = ComputeRAnsPrecision(uniqueSymbolsBitLength);
+        precision = 1 << precisionBits;
     }
     
-    public bool StartDecoding(int numBytes)
+    private static int ComputeRAnsPrecision(int uniqueSymbolsBitLength)
     {
-        if (numBytes <= 0)
-            return false;
-            
-        if (bufferOffset + numBytes > buffer.Length)
+        return (3 * uniqueSymbolsBitLength) / 2 + 1;
+    }
+    
+    public bool Create(DecoderBuffer buffer)
+    {
+        if (!VarintDecoding.DecodeVarint(buffer, out numSymbols))
             return false;
         
-        bufferOffset += numBytes - 1;
+        if (numSymbols / 64 > buffer.RemainingSize)
+            return false;
         
-        state = 0;
-        for (int i = 0; i < 4 && bufferOffset >= 0; i++)
+        probabilityTable = new uint[numSymbols];
+        
+        if (numSymbols == 0)
+            return true;
+        
+        for (uint i = 0; i < numSymbols; i++)
         {
-            state = (state << 8) | buffer[bufferOffset--];
+            if (!buffer.Decode(out byte probData))
+                return false;
+            
+            int token = probData & 3;
+            if (token == 3)
+            {
+                uint offset = (uint)(probData >> 2);
+                if (i + offset >= numSymbols)
+                    return false;
+                
+                for (uint j = 0; j <= offset; j++)
+                {
+                    probabilityTable[i + j] = 0;
+                }
+                i += offset;
+            }
+            else
+            {
+                int extraBytes = token;
+                uint prob = (uint)(probData >> 2);
+                for (int b = 0; b < extraBytes; b++)
+                {
+                    if (!buffer.Decode(out byte eb))
+                        return false;
+                    prob |= (uint)eb << (8 * (b + 1) - 2);
+                }
+                probabilityTable[i] = prob;
+            }
+        }
+        
+        return BuildLookupTable();
+    }
+    
+    private bool BuildLookupTable()
+    {
+        lookupTable = new uint[precision];
+        
+        uint sum = 0;
+        for (uint i = 0; i < numSymbols; i++)
+        {
+            sum += probabilityTable[i];
+        }
+        
+        if (sum == 0)
+            return true;
+        
+        uint cumulativeProb = 0;
+        for (uint i = 0; i < numSymbols; i++)
+        {
+            uint prob = probabilityTable[i];
+            if (prob == 0)
+                continue;
+            
+            for (uint j = 0; j < prob; j++)
+            {
+                if (cumulativeProb + j >= precision)
+                    return false;
+                lookupTable[cumulativeProb + j] = i;
+            }
+            cumulativeProb += prob;
         }
         
         return true;
     }
     
-    public uint DecodeSymbol(RAnsSymbolDecoder symbolDecoder)
+    public bool StartDecoding(DecoderBuffer buffer)
     {
-        uint x = state;
-        uint quot = x / RAnsL;
-        uint rem = x % RAnsL;
+        if (!VarintDecoding.DecodeVarint(buffer, out ulong bytesEncoded))
+            return false;
         
-        uint fetch = 0;
-        if (bufferOffset >= 0 && bufferOffset < buffer.Length)
+        if (bytesEncoded > (ulong)buffer.RemainingSize)
+            return false;
+        
+        this.buffer = buffer.GetDataAtCurrentPosition();
+        int dataStart = 0;
+        int numBytes = (int)bytesEncoded;
+        
+        if (numBytes < 4)
+            return false;
+        
+        bufferOffset = numBytes - 1;
+        
+        state = 0;
+        for (int i = 0; i < 4 && bufferOffset >= dataStart; i++)
         {
-            fetch = buffer[bufferOffset--];
+            state = (state << 8) | this.buffer[bufferOffset--];
         }
         
-        uint symbol = rem >> (int)(RAnsPrecision - symbolDecoder.Probability);
+        buffer.Advance((int)bytesEncoded);
         
-        uint start = symbolDecoder.CumulativeProbability;
-        state = start + (quot * RAnsL) + (rem - start * RAnsL);
+        return true;
+    }
+    
+    public uint DecodeSymbol()
+    {
+        uint quotient = state / (uint)precision;
+        uint remainder = state % (uint)precision;
         
-        while (state < RAnsL && bufferOffset >= 0)
+        uint symbol = lookupTable[remainder];
+        
+        uint cumulativeProb = 0;
+        for (uint i = 0; i < symbol; i++)
+        {
+            cumulativeProb += probabilityTable[i];
+        }
+        uint prob = probabilityTable[symbol];
+        
+        state = cumulativeProb + quotient * prob + (remainder - cumulativeProb);
+        
+        while (state < RANS_L && bufferOffset >= 0)
         {
             state = (state << 8) | buffer[bufferOffset--];
         }
@@ -109,5 +175,6 @@ public class RAnsDecoder
     public void EndDecoding()
     {
         state = 0;
+        buffer = null;
     }
 }
