@@ -120,26 +120,49 @@ public static class SymbolDecoding
     
     private static bool DecodeRawSymbols(uint numValues, DecoderBuffer buffer, uint[] outValues)
     {
+        Console.WriteLine($"[DecodeRawSymbols] Starting, buffer position: {buffer.DecodedSize}");
+        
         if (!buffer.Decode(out byte maxBitLength))
+        {
+            Console.WriteLine($"[DecodeRawSymbols] Failed to decode maxBitLength");
             return false;
+        }
+        
+        Console.WriteLine($"[DecodeRawSymbols] maxBitLength={maxBitLength}, buffer position: {buffer.DecodedSize}");
         
         var decoder = new RAnsSymbolDecoder(maxBitLength);
         if (!decoder.Create(buffer))
+        {
+            Console.WriteLine($"[DecodeRawSymbols] decoder.Create failed");
             return false;
+        }
+        
+        Console.WriteLine($"[DecodeRawSymbols] decoder.Create succeeded, NumSymbols={decoder.NumSymbols}, buffer position: {buffer.DecodedSize}");
         
         if (numValues > 0 && decoder.NumSymbols == 0)
+        {
+            Console.WriteLine($"[DecodeRawSymbols] NumSymbols is 0 but numValues={numValues}");
             return false;
+        }
         
         if (!decoder.StartDecoding(buffer))
+        {
+            Console.WriteLine($"[DecodeRawSymbols] decoder.StartDecoding failed");
             return false;
+        }
+        
+        Console.WriteLine($"[DecodeRawSymbols] decoder.StartDecoding succeeded, decoding {numValues} values");
         
         for (uint i = 0; i < numValues; i++)
         {
             outValues[i] = decoder.DecodeSymbol();
+            if (i < 5)
+                Console.WriteLine($"[DecodeRawSymbols] Value {i}: {outValues[i]}");
         }
         
         decoder.EndDecoding();
         
+        Console.WriteLine($"[DecodeRawSymbols] Success, buffer position: {buffer.DecodedSize}");
         return true;
     }
 }

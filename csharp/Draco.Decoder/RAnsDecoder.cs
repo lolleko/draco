@@ -38,7 +38,13 @@ public class RAnsSymbolDecoder
     
     private static int ComputeRAnsPrecision(int uniqueSymbolsBitLength)
     {
-        return (3 * uniqueSymbolsBitLength) / 2 + 1;
+        int unclampedPrecision = (3 * uniqueSymbolsBitLength) / 2;
+        // Clamp between 12 and 20 bits to match C++ implementation
+        if (unclampedPrecision < 12)
+            return 12;
+        if (unclampedPrecision > 20)
+            return 20;
+        return unclampedPrecision;
     }
     
     public bool Create(DecoderBuffer buffer)
@@ -109,27 +115,42 @@ public class RAnsSymbolDecoder
         uint cumulativeProb = 0;
         uint actProb = 0;
         
+        Console.WriteLine($"[BuildLookupTable] numSymbols={numSymbols}, precision={precision}");
+        
         for (uint i = 0; i < numSymbols; i++)
         {
             uint prob = probabilityTable[i];
             cumulativeProbabilities[i] = cumulativeProb;
             cumulativeProb += prob;
             
+            if (i < 10)
+                Console.WriteLine($"[BuildLookupTable] Symbol {i}: prob={prob}, cumulativeProb={cumulativeProb}");
+            
             if (cumulativeProb > (uint)precision)
+            {
+                Console.WriteLine($"[BuildLookupTable] cumulativeProb ({cumulativeProb}) > precision ({precision})");
                 return false;
+            }
             
             for (uint j = actProb; j < cumulativeProb; j++)
             {
                 if (j >= precision)
+                {
+                    Console.WriteLine($"[BuildLookupTable] j ({j}) >= precision ({precision})");
                     return false;
+                }
                 lookupTable[j] = i;
             }
             actProb = cumulativeProb;
         }
         
         if (cumulativeProb != precision)
+        {
+            Console.WriteLine($"[BuildLookupTable] cumulativeProb ({cumulativeProb}) != precision ({precision})");
             return false;
+        }
         
+        Console.WriteLine($"[BuildLookupTable] Success");
         return true;
     }
     
@@ -155,6 +176,14 @@ public class RAnsSymbolDecoder
         int offset = (int)bytesEncoded;
         
         Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] offset={offset}");
+        
+        // When num_symbols == 0 and bytesEncoded == 0, this is valid - no rANS data to decode
+        if (offset == 0 && numSymbols == 0)
+        {
+            Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] No rANS data (numSymbols==0, bytesEncoded==0), advancing buffer");
+            buffer.Advance((int)bytesEncoded);
+            return true;
+        }
         
         if (offset < 1)
         {

@@ -5,9 +5,9 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 public class PointCloudTest
 {
     [TestMethod]
-    public void DecodePointCloud_CubePC()
+    public void DecodePointCloud_NoQP()
     {
-        var drcPath = "../../../../../testdata/cube_pc.drc";
+        var drcPath = "../../../../../testdata/point_cloud_no_qp.drc";
         var data = File.ReadAllBytes(drcPath);
         Console.WriteLine($"File size: {data.Length} bytes");
         
