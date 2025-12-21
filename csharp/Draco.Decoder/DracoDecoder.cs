@@ -158,16 +158,30 @@ public class DracoDecoder
             if (attribute == null)
                 continue;
 
-            int valueSize = attribute.ValueSize;
-            int numValues = pointCloud.NumPoints;
-            Span<byte> data = attribute.Data;
+            if (!buffer.Decode(out byte encoderType))
+                return Status.IoError($"Failed to read encoder type for attribute {attId}");
 
-            for (int i = 0; i < numValues; i++)
+            SequentialAttributeDecoder decoder;
+            
+            if (encoderType == 0)
             {
-                int offset = i * valueSize;
-                if (!buffer.Decode(data.Slice(offset, valueSize)))
-                    return Status.IoError($"Failed to read attribute {attId} value {i}");
+                decoder = new SequentialIntegerAttributeDecoder();
             }
+            else
+            {
+                return Status.DracoError($"Unsupported encoder type: {encoderType}");
+            }
+
+            decoder.SetAttribute(attribute);
+            
+            if (!decoder.DecodePortableAttribute(pointCloud.NumPoints, buffer))
+                return Status.IoError($"Failed to decode portable attribute {attId}");
+            
+            if (!decoder.DecodeDataNeededByPortableTransform(buffer))
+                return Status.IoError($"Failed to decode transform data for attribute {attId}");
+            
+            if (!decoder.TransformAttributeToOriginalFormat(pointCloud.NumPoints))
+                return Status.IoError($"Failed to transform attribute {attId}");
         }
 
         return Status.OkStatus();

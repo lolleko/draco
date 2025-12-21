@@ -17,6 +17,8 @@ namespace Draco.Decoder;
 public interface IPredictionSchemeDecoder
 {
     bool ComputeOriginalValues(Span<int> corrValues, Span<int> outValues, int numComponents, int numEntries);
+    bool DecodePredictionData(DecoderBuffer buffer);
+    bool AreCorrectionsPositive();
 }
 
 public class PredictionSchemeDeltaDecoder : IPredictionSchemeDecoder
@@ -44,6 +46,16 @@ public class PredictionSchemeDeltaDecoder : IPredictionSchemeDecoder
         }
         
         return true;
+    }
+    
+    public bool DecodePredictionData(DecoderBuffer buffer)
+    {
+        return true;
+    }
+    
+    public bool AreCorrectionsPositive()
+    {
+        return false;
     }
 }
 
