@@ -105,9 +105,27 @@ public class DracoDecoder
             return Status.IoError("Failed to read number of points");
 
         pointCloud.NumPoints = (int)numPoints;
+        
+        if (!buffer.Decode(out byte numAttributesDecoders))
+            return Status.IoError("Failed to read number of attributes decoders");
+        
+        if (numAttributesDecoders != 1)
+            return Status.DracoError($"Only single attributes decoder supported, got {numAttributesDecoders}");
 
-        if (!buffer.Decode(out byte numAttributes))
-            return Status.IoError("Failed to read number of attributes");
+        uint numAttributes;
+        if (buffer.BitstreamVersion < 0x0200)
+        {
+            if (!buffer.Decode(out numAttributes))
+                return Status.IoError("Failed to read number of attributes (u32)");
+        }
+        else
+        {
+            if (!VarintDecoding.DecodeVarint(buffer, out numAttributes))
+                return Status.IoError("Failed to read number of attributes (varint)");
+        }
+        
+        if (numAttributes == 0 || numAttributes > 100)
+            return Status.IoError($"Invalid number of attributes: {numAttributes}");
 
         for (int i = 0; i < numAttributes; i++)
         {
@@ -121,6 +139,9 @@ public class DracoDecoder
             
             if (!buffer.Decode(out byte numComponents))
                 return Status.IoError($"Failed to read num components for attribute {i}");
+            
+            if (!buffer.Decode(out byte normalized))
+                return Status.IoError($"Failed to read normalized for attribute {i}");
 
             attribute.AttributeType = (GeometryAttributeType)attributeType;
             attribute.DataType = (DataType)dataType;
@@ -163,13 +184,19 @@ public class DracoDecoder
 
             SequentialAttributeDecoder decoder;
             
-            if (encoderType == 0)
+            switch (encoderType)
             {
-                decoder = new SequentialIntegerAttributeDecoder();
-            }
-            else
-            {
-                return Status.DracoError($"Unsupported encoder type: {encoderType}");
+                case 0: // SEQUENTIAL_ATTRIBUTE_ENCODER_GENERIC
+                    decoder = new SequentialAttributeDecoder();
+                    break;
+                case 1: // SEQUENTIAL_ATTRIBUTE_ENCODER_INTEGER
+                    decoder = new SequentialIntegerAttributeDecoder();
+                    break;
+                case 2: // SEQUENTIAL_ATTRIBUTE_ENCODER_QUANTIZATION
+                    decoder = new SequentialQuantizationAttributeDecoder();
+                    break;
+                default:
+                    return Status.DracoError($"Unsupported encoder type: {encoderType}");
             }
 
             decoder.SetAttribute(attribute);

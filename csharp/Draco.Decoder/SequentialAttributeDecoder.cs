@@ -60,7 +60,17 @@ public class SequentialAttributeDecoder
     
     protected virtual bool DecodeValues(int numPoints, DecoderBuffer buffer)
     {
-        return false;
+        int numComponents = attribute.NumComponents;
+        int valueSize = attribute.ValueSize;
+        
+        for (int i = 0; i < numPoints; i++)
+        {
+            int offset = i * valueSize;
+            if (!buffer.Decode(attribute.Data.AsSpan().Slice(offset, valueSize)))
+                return false;
+        }
+        
+        return true;
     }
     
     public void SetAttribute(PointAttribute attr)
