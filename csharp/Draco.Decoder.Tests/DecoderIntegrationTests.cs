@@ -13,26 +13,27 @@
 // limitations under the License.
 
 using Draco.Decoder;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Draco.Decoder.Tests;
 
+[TestClass]
 public class DecoderIntegrationTests
 {
-    [Fact]
+    [TestMethod]
     public void DracoDecoder_CanIdentifyDracoFile()
     {
-        // Create a minimal valid Draco header
         var buffer = new DecoderBuffer();
         var data = CreateMinimalDracoHeader();
         buffer.Init(data);
 
         var result = DracoDecoder.GetEncodedGeometryType(buffer);
         
-        Assert.True(result.Ok);
-        Assert.Equal(EncodedGeometryType.TriangularMesh, result.Value);
+        Assert.IsTrue(result.Ok);
+        Assert.AreEqual(EncodedGeometryType.TriangularMesh, result.Value);
     }
 
-    [Fact]
+    [TestMethod]
     public void DracoDecoder_RejectsInvalidMagic()
     {
         var buffer = new DecoderBuffer();
@@ -41,22 +42,20 @@ public class DecoderIntegrationTests
 
         var result = DracoDecoder.GetEncodedGeometryType(buffer);
         
-        Assert.False(result.Ok);
-        Assert.Contains("magic", result.Status.ErrorMessage.ToLower());
+        Assert.IsFalse(result.Ok);
+        Assert.IsTrue(result.Status.ErrorMessage.ToLower().Contains("magic"));
     }
 
-    [Fact]
+    [TestMethod]
     public void DracoDecoder_RejectsUnsupportedVersion()
     {
         var buffer = new DecoderBuffer();
         var data = new byte[10];
-        // "DRACO"
         data[0] = (byte)'D';
         data[1] = (byte)'R';
         data[2] = (byte)'A';
         data[3] = (byte)'C';
         data[4] = (byte)'O';
-        // Version 99.99 (unsupported)
         data[5] = 99;
         data[6] = 99;
         
@@ -64,47 +63,35 @@ public class DecoderIntegrationTests
 
         var result = DracoDecoder.GetEncodedGeometryType(buffer);
         
-        Assert.False(result.Ok);
-        Assert.Equal(StatusCode.UnsupportedVersion, result.Status.Code);
+        Assert.IsFalse(result.Ok);
+        Assert.AreEqual(StatusCode.UnsupportedVersion, result.Status.Code);
     }
 
     private byte[] CreateMinimalDracoHeader()
     {
         var header = new List<byte>();
         
-        // Magic: "DRACO"
         header.AddRange(System.Text.Encoding.ASCII.GetBytes("DRACO"));
-        
-        // Version: 2.2
-        header.Add(2);  // Major
-        header.Add(2);  // Minor
-        
-        // Encoder type: 1 (mesh)
+        header.Add(2);
+        header.Add(2);
         header.Add(1);
-        
-        // Encoder method: 1 (edgebreaker)
         header.Add(1);
-        
-        // Flags: 0x0000
         header.Add(0);
         header.Add(0);
         
         return header.ToArray();
     }
 
-    [Fact]
+    [TestMethod]
     public void Mesh_ToFromAttributes_RoundTrip()
     {
-        // Create a simple triangle mesh
         var mesh = new Mesh();
         mesh.NumPoints = 3;
         mesh.AddFace(new Face(0, 1, 2));
 
-        // Add position attribute
         var posAttr = new PointAttribute();
         posAttr.Init(GeometryAttributeType.Position, DataType.Float32, 3, 3);
         
-        // Set some vertex positions
         Span<float> v0 = stackalloc float[] { 0.0f, 0.0f, 0.0f };
         Span<float> v1 = stackalloc float[] { 1.0f, 0.0f, 0.0f };
         Span<float> v2 = stackalloc float[] { 0.0f, 1.0f, 0.0f };
@@ -115,17 +102,15 @@ public class DecoderIntegrationTests
         
         mesh.AddAttribute(posAttr);
 
-        // Verify we can read back the data
         var retrievedAttr = mesh.GetNamedAttribute(GeometryAttributeType.Position);
-        Assert.NotNull(retrievedAttr);
-        Assert.Equal(3, retrievedAttr.NumComponents);
-        Assert.Equal(DataType.Float32, retrievedAttr.DataType);
+        Assert.IsNotNull(retrievedAttr);
+        Assert.AreEqual(3, retrievedAttr.NumComponents);
+        Assert.AreEqual(DataType.Float32, retrievedAttr.DataType);
         
-        // Read back first vertex
         var vertexData = retrievedAttr.GetValue(0);
         var floats = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(vertexData);
-        Assert.Equal(0.0f, floats[0]);
-        Assert.Equal(0.0f, floats[1]);
-        Assert.Equal(0.0f, floats[2]);
+        Assert.AreEqual(0.0f, floats[0]);
+        Assert.AreEqual(0.0f, floats[1]);
+        Assert.AreEqual(0.0f, floats[2]);
     }
 }

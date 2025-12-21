@@ -13,92 +13,104 @@
 // limitations under the License.
 
 using Draco.Decoder;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Draco.Decoder.Tests;
 
+[TestClass]
 public class DataTypeTests
 {
-    [Fact]
+    [TestMethod]
     public void DataType_GetSize_ReturnsCorrectSizes()
     {
-        Assert.Equal(1, DataType.Int8.GetSize());
-        Assert.Equal(1, DataType.UInt8.GetSize());
-        Assert.Equal(2, DataType.Int16.GetSize());
-        Assert.Equal(2, DataType.UInt16.GetSize());
-        Assert.Equal(4, DataType.Int32.GetSize());
-        Assert.Equal(4, DataType.UInt32.GetSize());
-        Assert.Equal(4, DataType.Float32.GetSize());
-        Assert.Equal(8, DataType.Int64.GetSize());
-        Assert.Equal(8, DataType.UInt64.GetSize());
-        Assert.Equal(8, DataType.Float64.GetSize());
-        Assert.Equal(1, DataType.Bool.GetSize());
-        Assert.Equal(0, DataType.Invalid.GetSize());
+        Assert.AreEqual(1, DataType.Int8.GetSize());
+        Assert.AreEqual(1, DataType.UInt8.GetSize());
+        Assert.AreEqual(2, DataType.Int16.GetSize());
+        Assert.AreEqual(2, DataType.UInt16.GetSize());
+        Assert.AreEqual(4, DataType.Int32.GetSize());
+        Assert.AreEqual(4, DataType.UInt32.GetSize());
+        Assert.AreEqual(4, DataType.Float32.GetSize());
+        Assert.AreEqual(8, DataType.Int64.GetSize());
+        Assert.AreEqual(8, DataType.UInt64.GetSize());
+        Assert.AreEqual(8, DataType.Float64.GetSize());
+        Assert.AreEqual(1, DataType.Bool.GetSize());
+        Assert.AreEqual(0, DataType.Invalid.GetSize());
     }
 }
 
+[TestClass]
 public class StatusTests
 {
-    [Fact]
+    [TestMethod]
     public void Status_OkStatus_IsOk()
     {
         var status = Status.OkStatus();
-        Assert.True(status.Ok);
-        Assert.Equal(StatusCode.Ok, status.Code);
+        Assert.IsTrue(status.Ok);
+        Assert.AreEqual(StatusCode.Ok, status.Code);
     }
 
-    [Fact]
+    [TestMethod]
     public void Status_Error_IsNotOk()
     {
         var status = Status.DracoError("Test error");
-        Assert.False(status.Ok);
-        Assert.Equal(StatusCode.DracoError, status.Code);
-        Assert.Equal("Test error", status.ErrorMessage);
+        Assert.IsFalse(status.Ok);
+        Assert.AreEqual(StatusCode.DracoError, status.Code);
+        Assert.AreEqual("Test error", status.ErrorMessage);
     }
 
-    [Fact]
+    [TestMethod]
     public void StatusOr_WithValue_CanGetValue()
     {
         var statusOr = StatusOr<int>.FromValue(42);
-        Assert.True(statusOr.Ok);
-        Assert.Equal(42, statusOr.Value);
+        Assert.IsTrue(statusOr.Ok);
+        Assert.AreEqual(42, statusOr.Value);
     }
 
-    [Fact]
+    [TestMethod]
     public void StatusOr_WithError_ThrowsOnValueAccess()
     {
         var statusOr = StatusOr<int>.FromStatus(Status.DracoError("Test"));
-        Assert.False(statusOr.Ok);
-        Assert.Throws<InvalidOperationException>(() => statusOr.Value);
+        Assert.IsFalse(statusOr.Ok);
+        try
+        {
+            var _ = statusOr.Value;
+            Assert.Fail("Expected InvalidOperationException");
+        }
+        catch (InvalidOperationException)
+        {
+            // Expected
+        }
     }
 }
 
+[TestClass]
 public class DecoderBufferTests
 {
-    [Fact]
+    [TestMethod]
     public void DecoderBuffer_Init_SetsDataCorrectly()
     {
         var buffer = new DecoderBuffer();
         var data = new byte[] { 1, 2, 3, 4, 5 };
         buffer.Init(data);
 
-        Assert.Equal(5, buffer.RemainingSize);
-        Assert.Equal(0, buffer.DecodedSize);
+        Assert.AreEqual(5, buffer.RemainingSize);
+        Assert.AreEqual(0, buffer.DecodedSize);
     }
 
-    [Fact]
+    [TestMethod]
     public void DecoderBuffer_DecodeUInt32_DecodesCorrectly()
     {
         var buffer = new DecoderBuffer();
         var data = BitConverter.GetBytes(0x12345678u);
         buffer.Init(data);
 
-        Assert.True(buffer.Decode(out uint value));
-        Assert.Equal(0x12345678u, value);
-        Assert.Equal(4, buffer.DecodedSize);
-        Assert.Equal(0, buffer.RemainingSize);
+        Assert.IsTrue(buffer.Decode(out uint value));
+        Assert.AreEqual(0x12345678u, value);
+        Assert.AreEqual(4, buffer.DecodedSize);
+        Assert.AreEqual(0, buffer.RemainingSize);
     }
 
-    [Fact]
+    [TestMethod]
     public void DecoderBuffer_DecodeBytes_DecodesCorrectly()
     {
         var buffer = new DecoderBuffer();
@@ -106,27 +118,27 @@ public class DecoderBufferTests
         buffer.Init(data);
 
         Span<byte> output = stackalloc byte[3];
-        Assert.True(buffer.Decode(output));
-        Assert.Equal(1, output[0]);
-        Assert.Equal(2, output[1]);
-        Assert.Equal(3, output[2]);
-        Assert.Equal(3, buffer.DecodedSize);
+        Assert.IsTrue(buffer.Decode(output));
+        Assert.AreEqual((byte)1, output[0]);
+        Assert.AreEqual((byte)2, output[1]);
+        Assert.AreEqual((byte)3, output[2]);
+        Assert.AreEqual(3, buffer.DecodedSize);
     }
 
-    [Fact]
+    [TestMethod]
     public void DecoderBuffer_Peek_DoesNotAdvancePosition()
     {
         var buffer = new DecoderBuffer();
         var data = BitConverter.GetBytes(0x12345678u);
         buffer.Init(data);
 
-        Assert.True(buffer.Peek(out uint value));
-        Assert.Equal(0x12345678u, value);
-        Assert.Equal(0, buffer.DecodedSize);
-        Assert.Equal(4, buffer.RemainingSize);
+        Assert.IsTrue(buffer.Peek(out uint value));
+        Assert.AreEqual(0x12345678u, value);
+        Assert.AreEqual(0, buffer.DecodedSize);
+        Assert.AreEqual(4, buffer.RemainingSize);
     }
 
-    [Fact]
+    [TestMethod]
     public void DecoderBuffer_Advance_MovesPosition()
     {
         var buffer = new DecoderBuffer();
@@ -134,39 +146,40 @@ public class DecoderBufferTests
         buffer.Init(data);
 
         buffer.Advance(5);
-        Assert.Equal(5, buffer.DecodedSize);
-        Assert.Equal(5, buffer.RemainingSize);
+        Assert.AreEqual(5, buffer.DecodedSize);
+        Assert.AreEqual(5, buffer.RemainingSize);
     }
 
-    [Fact]
+    [TestMethod]
     public void DecoderBuffer_BitDecoding_Works()
     {
         var buffer = new DecoderBuffer();
         var data = new byte[] { 0b10110101, 0b11001010 };
         buffer.Init(data);
 
-        Assert.True(buffer.StartBitDecoding(false, out _));
-        Assert.True(buffer.BitDecoderActive);
+        Assert.IsTrue(buffer.StartBitDecoding(false, out _));
+        Assert.IsTrue(buffer.BitDecoderActive);
 
-        Assert.True(buffer.DecodeLeastSignificantBits32(4, out uint value1));
-        Assert.Equal(0b0101u, value1);
+        Assert.IsTrue(buffer.DecodeLeastSignificantBits32(4, out uint value1));
+        Assert.AreEqual(0b0101u, value1);
 
-        Assert.True(buffer.DecodeLeastSignificantBits32(4, out uint value2));
-        Assert.Equal(0b1011u, value2);
+        Assert.IsTrue(buffer.DecodeLeastSignificantBits32(4, out uint value2));
+        Assert.AreEqual(0b1011u, value2);
 
         buffer.EndBitDecoding();
-        Assert.False(buffer.BitDecoderActive);
-        Assert.Equal(1, buffer.DecodedSize);
+        Assert.IsFalse(buffer.BitDecoderActive);
+        Assert.AreEqual(1, buffer.DecodedSize);
     }
 }
 
+[TestClass]
 public class PointCloudTests
 {
-    [Fact]
+    [TestMethod]
     public void PointCloud_AddAttribute_IncreasesCount()
     {
         var pc = new PointCloud();
-        Assert.Equal(0, pc.NumAttributes);
+        Assert.AreEqual(0, pc.NumAttributes);
 
         var attr = new PointAttribute
         {
@@ -176,10 +189,10 @@ public class PointCloudTests
         };
         pc.AddAttribute(attr);
 
-        Assert.Equal(1, pc.NumAttributes);
+        Assert.AreEqual(1, pc.NumAttributes);
     }
 
-    [Fact]
+    [TestMethod]
     public void PointCloud_GetAttribute_ReturnsCorrectAttribute()
     {
         var pc = new PointCloud();
@@ -192,11 +205,11 @@ public class PointCloudTests
         int id = pc.AddAttribute(attr);
 
         var retrieved = pc.GetAttribute(id);
-        Assert.NotNull(retrieved);
-        Assert.Equal(GeometryAttributeType.Position, retrieved.AttributeType);
+        Assert.IsNotNull(retrieved);
+        Assert.AreEqual(GeometryAttributeType.Position, retrieved.AttributeType);
     }
 
-    [Fact]
+    [TestMethod]
     public void PointCloud_GetNamedAttribute_ReturnsCorrectAttribute()
     {
         var pc = new PointCloud();
@@ -209,24 +222,25 @@ public class PointCloudTests
         pc.AddAttribute(posAttr);
 
         var retrieved = pc.GetNamedAttribute(GeometryAttributeType.Position);
-        Assert.NotNull(retrieved);
-        Assert.Equal(GeometryAttributeType.Position, retrieved.AttributeType);
+        Assert.IsNotNull(retrieved);
+        Assert.AreEqual(GeometryAttributeType.Position, retrieved.AttributeType);
     }
 }
 
+[TestClass]
 public class MeshTests
 {
-    [Fact]
+    [TestMethod]
     public void Mesh_AddFace_IncreasesCount()
     {
         var mesh = new Mesh();
-        Assert.Equal(0, mesh.NumFaces);
+        Assert.AreEqual(0, mesh.NumFaces);
 
         mesh.AddFace(new Face(0, 1, 2));
-        Assert.Equal(1, mesh.NumFaces);
+        Assert.AreEqual(1, mesh.NumFaces);
     }
 
-    [Fact]
+    [TestMethod]
     public void Mesh_GetFace_ReturnsCorrectFace()
     {
         var mesh = new Mesh();
@@ -234,12 +248,12 @@ public class MeshTests
         mesh.AddFace(face);
 
         var retrieved = mesh.GetFace(0);
-        Assert.Equal(10, retrieved.V0);
-        Assert.Equal(20, retrieved.V1);
-        Assert.Equal(30, retrieved.V2);
+        Assert.AreEqual(10, retrieved.V0);
+        Assert.AreEqual(20, retrieved.V1);
+        Assert.AreEqual(30, retrieved.V2);
     }
 
-    [Fact]
+    [TestMethod]
     public void Mesh_GetIndices_ReturnsCorrectArray()
     {
         var mesh = new Mesh();
@@ -247,7 +261,7 @@ public class MeshTests
         mesh.AddFace(new Face(2, 3, 4));
 
         var indices = mesh.GetIndices();
-        Assert.Equal(6, indices.Length);
-        Assert.Equal(new[] { 0, 1, 2, 2, 3, 4 }, indices);
+        Assert.AreEqual(6, indices.Length);
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 2, 3, 4 }, indices);
     }
 }
