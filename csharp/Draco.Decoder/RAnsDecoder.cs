@@ -17,6 +17,7 @@ namespace Draco.Decoder;
 public class RAnsSymbolDecoder
 {
     private uint[] probabilityTable;
+    private uint[] cumulativeProbabilities;
     private uint[] lookupTable;
     private uint numSymbols;
     private int precisionBits;
@@ -49,6 +50,7 @@ public class RAnsSymbolDecoder
             return false;
         
         probabilityTable = new uint[numSymbols];
+        cumulativeProbabilities = new uint[numSymbols];
         
         if (numSymbols == 0)
             return true;
@@ -92,30 +94,29 @@ public class RAnsSymbolDecoder
     {
         lookupTable = new uint[precision];
         
-        uint sum = 0;
-        for (uint i = 0; i < numSymbols; i++)
-        {
-            sum += probabilityTable[i];
-        }
-        
-        if (sum == 0)
-            return true;
-        
         uint cumulativeProb = 0;
+        uint actProb = 0;
+        
         for (uint i = 0; i < numSymbols; i++)
         {
             uint prob = probabilityTable[i];
-            if (prob == 0)
-                continue;
-            
-            for (uint j = 0; j < prob; j++)
-            {
-                if (cumulativeProb + j >= precision)
-                    return false;
-                lookupTable[cumulativeProb + j] = i;
-            }
+            cumulativeProbabilities[i] = cumulativeProb;
             cumulativeProb += prob;
+            
+            if (cumulativeProb > (uint)precision)
+                return false;
+            
+            for (uint j = actProb; j < cumulativeProb; j++)
+            {
+                if (j >= precision)
+                    return false;
+                lookupTable[j] = i;
+            }
+            actProb = cumulativeProb;
         }
+        
+        if (cumulativeProb != precision)
+            return false;
         
         return true;
     }
@@ -154,15 +155,10 @@ public class RAnsSymbolDecoder
         uint remainder = state % (uint)precision;
         
         uint symbol = lookupTable[remainder];
-        
-        uint cumulativeProb = 0;
-        for (uint i = 0; i < symbol; i++)
-        {
-            cumulativeProb += probabilityTable[i];
-        }
         uint prob = probabilityTable[symbol];
+        uint cumProb = cumulativeProbabilities[symbol];
         
-        state = cumulativeProb + quotient * prob + (remainder - cumulativeProb);
+        state = cumProb + quotient * prob + (remainder - cumProb);
         
         while (state < RANS_L && bufferOffset >= 0)
         {

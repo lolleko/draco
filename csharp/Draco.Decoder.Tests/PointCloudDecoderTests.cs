@@ -9,6 +9,8 @@ public class PointCloudTest
     {
         var drcPath = "../../../../../testdata/cube_pc.drc";
         var data = File.ReadAllBytes(drcPath);
+        Console.WriteLine($"File size: {data.Length} bytes");
+        
         var buffer = new DecoderBuffer();
         buffer.Init(data);
 
@@ -16,6 +18,7 @@ public class PointCloudTest
         var result = decoder.DecodePointCloudFromBuffer(buffer);
 
         Console.WriteLine($"Decode status: {result.Status}");
+        Console.WriteLine($"Buffer position after decode: {buffer.DecodedSize}/{data.Length}");
         
         if (result.Ok)
         {
