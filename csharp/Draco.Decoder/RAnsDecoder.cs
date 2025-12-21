@@ -130,19 +130,41 @@ public class RAnsSymbolDecoder
             return false;
         
         this.buffer = buffer.GetDataAtCurrentPosition();
-        int dataStart = 0;
-        int numBytes = (int)bytesEncoded;
+        int offset = (int)bytesEncoded;
         
-        if (numBytes < 4)
+        if (offset < 1)
             return false;
         
-        bufferOffset = numBytes - 1;
+        byte lastByte = this.buffer[offset - 1];
+        uint x = (uint)(lastByte >> 6);
         
-        state = 0;
-        for (int i = 0; i < 4 && bufferOffset >= dataStart; i++)
+        if (x == 0)
         {
-            state = (state << 8) | this.buffer[bufferOffset--];
+            bufferOffset = offset - 1;
+            state = (uint)(lastByte & 0x3F);
         }
+        else if (x == 1)
+        {
+            if (offset < 2)
+                return false;
+            bufferOffset = offset - 2;
+            state = (uint)(((this.buffer[offset - 1] & 0xFF) | ((this.buffer[offset - 2] & 0xFF) << 8)) & 0x3FFF);
+        }
+        else if (x == 2)
+        {
+            if (offset < 3)
+                return false;
+            bufferOffset = offset - 3;
+            state = (uint)(((this.buffer[offset - 1] & 0xFF) | ((this.buffer[offset - 2] & 0xFF) << 8) | ((this.buffer[offset - 3] & 0xFF) << 16)) & 0x3FFFFF);
+        }
+        else
+        {
+            return false;
+        }
+        
+        state += RANS_L;
+        if (state >= RANS_L * 256)
+            return false;
         
         buffer.Advance((int)bytesEncoded);
         
@@ -151,6 +173,11 @@ public class RAnsSymbolDecoder
     
     public uint DecodeSymbol()
     {
+        while (state < RANS_L && bufferOffset > 0)
+        {
+            state = state * 256 + buffer[--bufferOffset];
+        }
+        
         uint quotient = state / (uint)precision;
         uint remainder = state % (uint)precision;
         
@@ -158,12 +185,7 @@ public class RAnsSymbolDecoder
         uint prob = probabilityTable[symbol];
         uint cumProb = cumulativeProbabilities[symbol];
         
-        state = cumProb + quotient * prob + (remainder - cumProb);
-        
-        while (state < RANS_L && bufferOffset >= 0)
-        {
-            state = (state << 8) | buffer[bufferOffset--];
-        }
+        state = quotient * prob + remainder - cumProb;
         
         return symbol;
     }

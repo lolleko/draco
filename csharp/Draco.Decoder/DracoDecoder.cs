@@ -173,14 +173,20 @@ public class DracoDecoder
 
     private Status DecodeAttributeData(DecoderBuffer buffer, PointCloud pointCloud)
     {
+        Console.WriteLine($"[DecodeAttributeData] Starting, buffer position: {buffer.DecodedSize}");
+        
         for (int attId = 0; attId < pointCloud.NumAttributes; attId++)
         {
+            Console.WriteLine($"[DecodeAttributeData] Decoding attribute {attId}");
+            
             var attribute = pointCloud.GetAttribute(attId);
             if (attribute == null)
                 continue;
 
             if (!buffer.Decode(out byte encoderType))
                 return Status.IoError($"Failed to read encoder type for attribute {attId}");
+            
+            Console.WriteLine($"[DecodeAttributeData] Attribute {attId}, encoderType={encoderType}, buffer position: {buffer.DecodedSize}");
 
             SequentialAttributeDecoder decoder;
             
@@ -201,14 +207,31 @@ public class DracoDecoder
 
             decoder.SetAttribute(attribute);
             
+            Console.WriteLine($"[DecodeAttributeData] Calling DecodePortableAttribute for attribute {attId}");
+            
             if (!decoder.DecodePortableAttribute(pointCloud.NumPoints, buffer))
+            {
+                Console.WriteLine($"[DecodeAttributeData] DecodePortableAttribute failed at buffer position {buffer.DecodedSize}");
                 return Status.IoError($"Failed to decode portable attribute {attId}");
+            }
+            
+            Console.WriteLine($"[DecodeAttributeData] Successfully decoded attribute {attId}, calling DecodeDataNeededByPortableTransform");
             
             if (!decoder.DecodeDataNeededByPortableTransform(buffer))
+            {
+                Console.WriteLine($"[DecodeAttributeData] DecodeDataNeededByPortableTransform failed");
                 return Status.IoError($"Failed to decode transform data for attribute {attId}");
+            }
+            
+            Console.WriteLine($"[DecodeAttributeData] Calling TransformAttributeToOriginalFormat");
             
             if (!decoder.TransformAttributeToOriginalFormat(pointCloud.NumPoints))
+            {
+                Console.WriteLine($"[DecodeAttributeData] TransformAttributeToOriginalFormat failed");
                 return Status.IoError($"Failed to transform attribute {attId}");
+            }
+            
+            Console.WriteLine($"[DecodeAttributeData] Successfully decoded attribute {attId}, buffer position: {buffer.DecodedSize}");
         }
 
         return Status.OkStatus();

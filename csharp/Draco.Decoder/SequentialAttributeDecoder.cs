@@ -95,28 +95,54 @@ public class SequentialIntegerAttributeDecoder : SequentialAttributeDecoder
     
     protected override bool DecodeValues(int numPoints, DecoderBuffer buffer)
     {
+        Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Starting, buffer position: {buffer.DecodedSize}");
+        
         if (!buffer.Decode(out byte predictionSchemeMethod))
+        {
+            Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Failed to read predictionSchemeMethod");
             return false;
+        }
+        
+        Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] predictionSchemeMethod={predictionSchemeMethod}");
         
         if (predictionSchemeMethod < 0 || predictionSchemeMethod >= (byte)PredictionSchemeMethod.Count)
+        {
+            Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Invalid predictionSchemeMethod");
             return false;
+        }
         
         if (predictionSchemeMethod != (byte)PredictionSchemeMethod.None)
         {
             if (!buffer.Decode(out byte predictionTransformType))
+            {
+                Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Failed to read predictionTransformType");
                 return false;
+            }
+            
+            Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] predictionTransformType={predictionTransformType}");
             
             if (predictionTransformType >= (byte)PredictionSchemeTransformType.Count)
+            {
+                Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Invalid predictionTransformType");
                 return false;
+            }
             
             predictionScheme = CreatePredictionScheme(
                 (PredictionSchemeMethod)predictionSchemeMethod,
                 (PredictionSchemeTransformType)predictionTransformType);
+            
+            Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Created predictionScheme: {predictionScheme != null}");
         }
         
-        if (!DecodeIntegerValues(numPoints, buffer))
-            return false;
+        Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Calling DecodeIntegerValues");
         
+        if (!DecodeIntegerValues(numPoints, buffer))
+        {
+            Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] DecodeIntegerValues failed");
+            return false;
+        }
+        
+        Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Success");
         return true;
     }
     
@@ -144,13 +170,23 @@ public class SequentialIntegerAttributeDecoder : SequentialAttributeDecoder
         
         var portableData = new int[numValues];
         
+        Console.WriteLine($"[DecodeIntegerValues] numPoints={numPoints}, numComponents={numComponents}, numValues={numValues}");
+        Console.WriteLine($"[DecodeIntegerValues] Buffer position before compressed byte: {buffer.DecodedSize}");
+        
         if (!buffer.Decode(out byte compressed))
             return false;
         
+        Console.WriteLine($"[DecodeIntegerValues] compressed={compressed}");
+        
         if (compressed > 0)
         {
+            Console.WriteLine($"[DecodeIntegerValues] Decoding symbols...");
             if (!DecodeSymbols((uint)numValues, numComponents, buffer, portableData))
+            {
+                Console.WriteLine($"[DecodeIntegerValues] DecodeSymbols failed at buffer position {buffer.DecodedSize}");
                 return false;
+            }
+            Console.WriteLine($"[DecodeIntegerValues] DecodeSymbols succeeded, first few values: {string.Join(", ", portableData.Take(Math.Min(10, portableData.Length)))}");
         }
         else
         {
