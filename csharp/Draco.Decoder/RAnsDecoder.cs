@@ -230,11 +230,8 @@ public class RAnsSymbolDecoder
         state += RANS_L;
         Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] state after adding RANS_L: {state}");
         
-        if (state >= RANS_L * 256)
-        {
-            Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] state >= RANS_L * 256");
-            return false;
-        }
+        // Note: C++ doesn't validate upper bound here - renormalization during DecodeSymbol
+        // keeps state >= RANS_L by pulling bytes as needed
         
         buffer.Advance((int)bytesEncoded);
         

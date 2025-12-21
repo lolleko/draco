@@ -230,6 +230,9 @@ public class DracoDecoder
                 case 3: // SEQUENTIAL_ATTRIBUTE_ENCODER_NORMALS
                     decoder = new SequentialNormalAttributeDecoder();
                     break;
+                case 6: // KD_TREE (uses quantization decoder for sequential decoding)
+                    decoder = new SequentialQuantizationAttributeDecoder();
+                    break;
                 default:
                     return Status.DracoError($"Unsupported encoder type: {encoderType}");
             }
