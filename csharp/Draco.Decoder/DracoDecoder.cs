@@ -139,6 +139,17 @@ public class DracoDecoder
         if (!geometryTypeResult.Ok)
             return geometryTypeResult.Status;
         
+        // HACK: Skip 4 unknown bytes (0x00000000) - investigating what these are
+        // cube_att.drc has 4 bytes of zeros at position 11-14 before mesh data
+        if (!buffer.Decode(out uint unknown))
+        {
+            Console.WriteLine($"[DecodeMeshInternal] Warning: Failed to read unknown 4 bytes");
+        }
+        else
+        {
+            Console.WriteLine($"[DecodeMeshInternal] Skipped 4 unknown bytes: 0x{unknown:X8}, buffer position: {buffer.DecodedSize}");
+        }
+        
         // For meshes, decode connectivity first (this also sets num_points and reads faces)
         var meshDecoder = new SequentialMeshDecoder(mesh, buffer, buffer.BitstreamVersion);
         var connectivityResult = meshDecoder.DecodeConnectivity();
