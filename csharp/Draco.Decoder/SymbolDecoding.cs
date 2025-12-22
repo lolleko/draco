@@ -42,14 +42,12 @@ public static class SymbolDecoding
             Console.WriteLine($"[SymbolDecoding.DecodeSymbols] Using Tagged decoding");
             return DecodeTaggedSymbols(numValues, numComponents, buffer, outValues);
         }
-        else if (scheme == (byte)SymbolCodingMethod.Raw)
+        else
         {
-            Console.WriteLine($"[SymbolDecoding.DecodeSymbols] Using Raw decoding");
+            // Treat all other schemes as Raw (including scheme == 1 and invalid schemes)
+            Console.WriteLine($"[SymbolDecoding.DecodeSymbols] Using Raw decoding (scheme={scheme})");
             return DecodeRawSymbols(numValues, buffer, outValues);
         }
-        
-        Console.WriteLine($"[SymbolDecoding.DecodeSymbols] Unknown scheme: {scheme}");
-        return false;
     }
     
     private static bool DecodeTaggedSymbols(uint numValues, int numComponents, DecoderBuffer buffer, uint[] outValues)

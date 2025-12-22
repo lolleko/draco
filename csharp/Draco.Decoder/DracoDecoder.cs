@@ -194,16 +194,16 @@ public class DracoDecoder
             if (!buffer.Decode(out byte normalized))
                 return Status.IoError($"Failed to read normalized for attribute {i}");
             
-            // For bitstream versions < 1.3, read custom_id (uint16)
+            // For bitstream versions < 2.0, read custom_id (uint16)
             ushort customId = (ushort)i;
-            if (buffer.BitstreamVersion < 0x0103)
+            if (buffer.BitstreamVersion < 0x0200)
             {
                 if (!buffer.Decode(out customId))
                     return Status.IoError($"Failed to read custom_id for attribute {i}");
             }
             else
             {
-                // For versions >= 1.3, read unique_id as varint
+                // For versions >= 2.0, read unique_id as varint
                 if (!VarintDecoding.DecodeVarint(buffer, out uint uniqueId))
                     return Status.IoError($"Failed to read unique_id for attribute {i}");
                 customId = (ushort)uniqueId;
