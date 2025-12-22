@@ -158,11 +158,13 @@ public class DracoDecoder
         Console.WriteLine($"[DecodeAttributeData] Starting, buffer position: {buffer.DecodedSize}");
         
         // First, read attribute metadata (this is DecodeAttributesDecoderData in C++)
+        // For version < 2.0, this is a byte, not uint32
         uint numAttributes;
         if (buffer.BitstreamVersion < 0x0200)
         {
-            if (!buffer.Decode(out numAttributes))
-                return Status.IoError("Failed to read number of attributes (u32)");
+            if (!buffer.Decode(out byte numAttrByte))
+                return Status.IoError("Failed to read number of attributes (byte)");
+            numAttributes = numAttrByte;
         }
         else
         {

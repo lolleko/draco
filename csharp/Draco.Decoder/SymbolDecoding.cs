@@ -75,29 +75,44 @@ public static class SymbolDecoding
         
         Console.WriteLine($"[DecodeTaggedSymbols] tagDecoder.StartDecoding succeeded, NumSymbols={tagDecoder.NumSymbols}, buffer position: {buffer.DecodedSize}");
         
-        // If numSymbols is 0, values are stored directly as bits (no symbol encoding)
+        // If numSymbols is 0, values are encoded using per-value bit lengths
         if (tagDecoder.NumSymbols == 0)
         {
-            Console.WriteLine($"[DecodeTaggedSymbols] NumSymbols is 0, reading values directly as bits");
+            Console.WriteLine($"[DecodeTaggedSymbols] NumSymbols is 0, reading with variable bit lengths");
             if (!buffer.StartBitDecoding(false, out ulong _))
             {
                 Console.WriteLine($"[DecodeTaggedSymbols] StartBitDecoding failed");
                 return false;
             }
             
-            // Read values directly - assuming 32-bit integers stored bit-by-bit
+            // Read bit length per value
             for (uint i = 0; i < numValues; i++)
             {
-                if (!buffer.DecodeLeastSignificantBits32(32, out uint value))
+                // Read bit length (using 5 bits since maxBitLength=5 gives 32 possible values)
+                if (!buffer.DecodeLeastSignificantBits32(5, out uint bitLength))
                 {
-                    Console.WriteLine($"[DecodeTaggedSymbols] Failed to decode value {i}");
+                    Console.WriteLine($"[DecodeTaggedSymbols] Failed to decode bit length for value {i}");
                     return false;
                 }
-                outValues[i] = value;
+                
+                // Now read the actual value using the bit length
+                if (bitLength > 0)
+                {
+                    if (!buffer.DecodeLeastSignificantBits32((int)bitLength, out uint value))
+                    {
+                        Console.WriteLine($"[DecodeTaggedSymbols] Failed to decode value {i} with bitLength {bitLength}");
+                        return false;
+                    }
+                    outValues[i] = value;
+                }
+                else
+                {
+                    outValues[i] = 0;
+                }
             }
             
             buffer.EndBitDecoding();
-            Console.WriteLine($"[DecodeTaggedSymbols] Successfully decoded {numValues} values directly, buffer position: {buffer.DecodedSize}");
+            Console.WriteLine($"[DecodeTaggedSymbols] Successfully decoded {numValues} values with variable bit lengths, buffer position: {buffer.DecodedSize}");
             return true;
         }
         

@@ -106,10 +106,13 @@ public class SequentialIntegerAttributeDecoder : SequentialAttributeDecoder
         
         Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] predictionSchemeMethod={predictionSchemeMethod}");
         
-        if (predictionSchemeMethod < 0 || predictionSchemeMethod >= (byte)PredictionSchemeMethod.Count)
+        // Prediction scheme method must be None (0), Difference (1), or Parallelogram (2)
+        // Values > 2 indicate encoder didn't write prediction scheme (older format or special case)
+        if (predictionSchemeMethod > (byte)PredictionSchemeMethod.Parallelogram)
         {
-            Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Invalid predictionSchemeMethod");
-            return false;
+            // Treat as None - the byte we read is probably part of the data
+            Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Unusual predictionSchemeMethod {predictionSchemeMethod}, assuming no prediction scheme in older format");
+            predictionSchemeMethod = (byte)PredictionSchemeMethod.None;
         }
         
         if (predictionSchemeMethod != (byte)PredictionSchemeMethod.None)
