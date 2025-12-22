@@ -90,11 +90,13 @@ namespace Draco.Decoder
             if (!VarintDecoding.DecodeVarint(buffer, out uint numSplitSymbols))
                 return Status.IoError("Failed to read number of split symbols");
 
-            // For simplified implementation, we'll decode symbols using simple bit reading
-            // Standard edgebreaker uses: C=0(1bit), S=100(3bits), L=110(3bits), R=101(3bits), E=111(3bits)
-            List<EdgebreakerSymbol> symbols = new List<EdgebreakerSymbol>();
+            // Decode traversal symbols (they are in a bit-decoded section)
+            // StartBitDecoding returns the size of the encoded section
+            if (!buffer.StartBitDecoding(true, out ulong traversalSize))
+                return Status.IoError("Failed to start bit decoding for traversal symbols");
             
-            // Read encoded symbols
+            // Read symbols from bit-decoded buffer
+            List<EdgebreakerSymbol> symbols = new List<EdgebreakerSymbol>();
             for (int i = 0; i < numEncodedSymbols; i++)
             {
                 EdgebreakerSymbol symbol = ReadSymbol();
@@ -104,6 +106,9 @@ namespace Draco.Decoder
                 }
                 symbols.Add(symbol);
             }
+
+            // Advance buffer past the bit-decoded section
+            buffer.EndBitDecoding();
 
             // Decode the mesh connectivity using edgebreaker algorithm
             var status = DecodeSymbols(symbols, (int)numSplitSymbols);
