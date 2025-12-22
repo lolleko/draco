@@ -32,7 +32,7 @@ namespace Draco.Decoder
             this.buffer = buffer;
         }
 
-        public StatusOr<bool> DecodeConnectivity()
+        public StatusOr<int> DecodeConnectivity()
         {
             // Read traversal decoder type
             if (!buffer.Decode(out byte traversalDecoderType))
@@ -98,7 +98,7 @@ namespace Draco.Decoder
 
             if (numFaces == 0)
             {
-                return StatusOr<bool>.FromValue(true);
+                return StatusOr<int>.FromValue(0);
             }
 
             // Initialize corner table
@@ -112,6 +112,11 @@ namespace Draco.Decoder
             vertexVisited = new List<bool>(new bool[numVertices]);
             faceVisited = new List<bool>(new bool[numFaces]);
 
+            // Read number of attribute data (needed for attribute connectivity)
+            // This comes BEFORE the symbol data
+            if (!buffer.Decode(out byte numAttributeData))
+                return Status.IoError("Failed to read num_attribute_data");
+            
             // Read number of encoded symbols
             if (!VarintDecoding.DecodeVarint(buffer, out uint numEncodedSymbols))
                 return Status.IoError("Failed to read number of encoded symbols");
@@ -146,7 +151,7 @@ namespace Draco.Decoder
             var status = DecodeSymbols(symbols, (int)numSplitSymbols);
             if (!status.Ok)
             {
-                return status;
+                return StatusOr<int>.FromStatus(status.Status);
             }
 
             // Build face array using SetFace method
@@ -156,7 +161,11 @@ namespace Draco.Decoder
                 mesh.SetFace(f, new Face(cornerToVertex[corner + 0], cornerToVertex[corner + 1], cornerToVertex[corner + 2]));
             }
 
-            return StatusOr<bool>.FromValue(true);
+            // Return numAttributeData - this tells the caller how many attribute decoders to expect
+            // In C++, this is stored in attribute_data_.size()
+            Console.WriteLine($"Edgebreaker: numAttributeData={numAttributeData}");
+
+            return StatusOr<int>.FromValue((int)numAttributeData);
         }
 
         private EdgebreakerSymbol ReadSymbol()

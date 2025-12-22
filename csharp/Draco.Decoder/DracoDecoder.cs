@@ -145,35 +145,38 @@ public class DracoDecoder
         byte encoderMethod = buffer.GetData()[8]; // encoder_method is at byte 8 in header
         
         // Decode connectivity based on encoder method
-        StatusOr<bool> connectivityResult;
+        int numAttributesDecoders;
         if (encoderMethod == 0)
         {
             // Sequential encoding
             var meshDecoder = new SequentialMeshDecoder(mesh, buffer, buffer.BitstreamVersion);
-            connectivityResult = meshDecoder.DecodeConnectivity();
+            var connectivityResult = meshDecoder.DecodeConnectivity();
+            if (!connectivityResult.Ok)
+                return connectivityResult.Status;
+            
+            // For sequential, read num_attributes_decoders from buffer
+            if (!buffer.Decode(out byte numAttrDecoders))
+                return Status.IoError("Failed to read number of attributes decoders");
+            numAttributesDecoders = numAttrDecoders;
         }
         else if (encoderMethod == 1)
         {
             // Edgebreaker encoding
             var edgebreakerDecoder = new EdgebreakerMeshDecoder(mesh, buffer);
-            connectivityResult = edgebreakerDecoder.DecodeConnectivity();
+            var connectivityResult = edgebreakerDecoder.DecodeConnectivity();
+            if (!connectivityResult.Ok)
+                return connectivityResult.Status;
+            
+            // For edgebreaker, num_attributes_decoders is returned from DecodeConnectivity
+            // (it was read as num_attribute_data in the connectivity section)
+            numAttributesDecoders = connectivityResult.Value;
         }
         else
         {
             return Status.DracoError($"Unsupported mesh encoder method: {encoderMethod}");
         }
-        
-        if (!connectivityResult.Ok)
-            return connectivityResult.Status;
 
         Console.WriteLine($"[DecodeMeshInternal] After connectivity: numPoints={mesh.NumPoints}, numFaces={mesh.NumFaces}, buffer position: {buffer.DecodedSize}");
-
-        // For mesh, PointCloudDecoder::DecodeGeometryData() is a no-op (just returns true)
-        // So we go straight to DecodePointAttributes which reads num_attributes_decoders
-        
-        if (!buffer.Decode(out byte numAttributesDecoders))
-            return Status.IoError("Failed to read number of attributes decoders");
-        
         Console.WriteLine($"[DecodeMeshInternal] numAttributesDecoders={numAttributesDecoders}, buffer position: {buffer.DecodedSize}");
         
         // Support multiple attribute decoders
