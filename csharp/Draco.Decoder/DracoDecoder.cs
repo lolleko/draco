@@ -124,10 +124,19 @@ public class DracoDecoder
         
         Console.WriteLine($"[DecodePointCloudInternal] numPoints={numPoints}, buffer position: {buffer.DecodedSize}");
         
-        // Decode attributes (point cloud sequential decoder creates one attributes decoder)
-        var status = DecodeAttributeData(buffer, pointCloud);
-        if (!status.Ok)
-            return status;
+        // Read number of attribute decoders (DecodePointAttributes)
+        if (!buffer.Decode(out byte numAttributesDecoders))
+            return Status.IoError("Failed to read number of attributes decoders");
+        
+        Console.WriteLine($"[DecodePointCloudInternal] numAttributesDecoders={numAttributesDecoders}, buffer position: {buffer.DecodedSize}");
+        
+        // Decode attributes for each decoder
+        for (int i = 0; i < numAttributesDecoders; i++)
+        {
+            var status = DecodeAttributeData(buffer, pointCloud);
+            if (!status.Ok)
+                return status;
+        }
         
         return Status.OkStatus();
     }
@@ -196,13 +205,12 @@ public class DracoDecoder
         Console.WriteLine($"[DecodeAttributeData] Starting, buffer position: {buffer.DecodedSize}");
         
         // First, read attribute metadata (this is DecodeAttributesDecoderData in C++)
-        // For version < 2.0, this is a byte, not uint32
+        // For version < 2.0, numAttributes is uint32, for >= 2.0 it's varint
         uint numAttributes;
         if (buffer.BitstreamVersion < 0x0200)
         {
-            if (!buffer.Decode(out byte numAttrByte))
-                return Status.IoError("Failed to read number of attributes (byte)");
-            numAttributes = numAttrByte;
+            if (!buffer.Decode(out numAttributes))
+                return Status.IoError("Failed to read number of attributes (uint32)");
         }
         else
         {
