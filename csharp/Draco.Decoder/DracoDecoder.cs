@@ -215,7 +215,7 @@ public class DracoDecoder
             attribute.AttributeType = (GeometryAttributeType)attributeType;
             attribute.DataType = (DataType)dataType;
             attribute.NumComponents = numComponents;
-            attribute.UniqueId = customId;
+            attribute.UniqueId = (int)customId;
 
             attribute.Init(attribute.AttributeType, attribute.DataType, 
                           attribute.NumComponents, pointCloud.NumPoints);
