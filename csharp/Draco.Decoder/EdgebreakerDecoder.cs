@@ -66,8 +66,6 @@ namespace Draco.Decoder
             mesh.NumPoints = numVertices;
             mesh.SetNumFaces(numFaces);
 
-            Console.WriteLine($"Edgebreaker: numVertices={numVertices}, numFaces={numFaces}, numEncodedSymbols={numEncodedSymbols}");
-
             if (numFaces == 0)
             {
                 return StatusOr<bool>.FromValue(true);
@@ -87,6 +85,8 @@ namespace Draco.Decoder
             // Read number of encoded symbols
             if (!VarintDecoding.DecodeVarint(buffer, out uint numEncodedSymbols))
                 return Status.IoError("Failed to read number of encoded symbols");
+            
+            Console.WriteLine($"Edgebreaker: numVertices={numVertices}, numFaces={numFaces}, numEncodedSymbols={numEncodedSymbols}");
 
             // Read number of split symbols (topology changes)
             if (!VarintDecoding.DecodeVarint(buffer, out uint numSplitSymbols))
