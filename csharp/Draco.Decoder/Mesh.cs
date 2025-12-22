@@ -49,6 +49,13 @@ public class Mesh : PointCloud
 
     public void AddFace(Face face) => faces.Add(face);
 
+    public void AddFace(int[] indices)
+    {
+        if (indices == null || indices.Length != 3)
+            throw new ArgumentException("Face must have exactly 3 indices");
+        faces.Add(new Face(indices[0], indices[1], indices[2]));
+    }
+
     public void SetFace(int faceId, Face face)
     {
         if (faceId >= faces.Count)
@@ -86,5 +93,10 @@ public class Mesh : PointCloud
             indices[i * 3 + 2] = face.V2;
         }
         return indices;
+    }
+
+    public void SetNumPoints(int numPoints)
+    {
+        NumPoints = numPoints;
     }
 }

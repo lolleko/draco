@@ -122,16 +122,25 @@ public class DracoDecoder
 
     private Status DecodeMeshInternal(DecoderBuffer buffer, Mesh mesh)
     {
-        var status = DecodePointCloudInternal(buffer, mesh);
-        if (!status.Ok)
-            return status;
+        // For meshes, decode connectivity first (this also sets num_points)
+        var meshDecoder = new SequentialMeshDecoder(mesh, buffer, buffer.BitstreamVersion);
+        var connectivityResult = meshDecoder.DecodeConnectivity();
+        if (!connectivityResult.Ok)
+            return connectivityResult.Status;
 
-        if (!buffer.Decode(out uint numFaces))
-            return Status.IoError("Failed to read number of faces");
+        Console.WriteLine($"[DecodeMeshInternal] After connectivity: numPoints={mesh.NumPoints}, numFaces={mesh.NumFaces}, buffer position: {buffer.DecodedSize}");
 
-        mesh.SetNumFaces((int)numFaces);
+        // Then read num_attributes_decoders
+        if (!buffer.Decode(out byte numAttributesDecoders))
+            return Status.IoError("Failed to read number of attributes decoders");
+        
+        Console.WriteLine($"[DecodeMeshInternal] numAttributesDecoders={numAttributesDecoders}, buffer position: {buffer.DecodedSize}");
+        
+        if (numAttributesDecoders != 1)
+            return Status.DracoError($"Only single attributes decoder supported, got {numAttributesDecoders}");
 
-        return DecodeFaceData(buffer, mesh);
+        // Then decode attributes
+        return DecodeAttributeData(buffer, mesh);
     }
 
     private Status DecodeAttributeData(DecoderBuffer buffer, PointCloud pointCloud)
@@ -277,21 +286,6 @@ public class DracoDecoder
             }
             
             Console.WriteLine($"[DecodeAttributeData] Successfully decoded attribute {attId}, buffer position: {buffer.DecodedSize}");
-        }
-
-        return Status.OkStatus();
-    }
-
-    private Status DecodeFaceData(DecoderBuffer buffer, Mesh mesh)
-    {
-        for (int i = 0; i < mesh.NumFaces; i++)
-        {
-            if (!buffer.Decode(out uint v0) || 
-                !buffer.Decode(out uint v1) || 
-                !buffer.Decode(out uint v2))
-                return Status.IoError($"Failed to read face {i}");
-
-            mesh.SetFace(i, new Face((int)v0, (int)v1, (int)v2));
         }
 
         return Status.OkStatus();
