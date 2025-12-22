@@ -45,6 +45,7 @@ public class DecoderBuffer
     public int DecodedSize => position;
     public bool BitDecoderActive => bitMode;
     public ushort BitstreamVersion => bitstreamVersion;
+    public byte[] GetData() => data;
 
     public void set_bitstreamVersion(ushort version) => bitstreamVersion = version;
 

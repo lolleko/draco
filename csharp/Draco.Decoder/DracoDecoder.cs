@@ -66,7 +66,7 @@ public class DracoDecoder
     {
         // Check geometry type on a copy of the buffer
         var tempBuffer = new DecoderBuffer();
-        tempBuffer.Init(buffer.data_, buffer.data_head_);
+        tempBuffer.Init(buffer.GetData(), buffer.BitstreamVersion);
         
         var geometryTypeResult = GetEncodedGeometryType(tempBuffer);
         if (!geometryTypeResult.Ok)
@@ -90,7 +90,7 @@ public class DracoDecoder
     {
         // Check geometry type on a copy of the buffer
         var tempBuffer = new DecoderBuffer();
-        tempBuffer.Init(buffer.data_, buffer.data_head_);
+        tempBuffer.Init(buffer.GetData(), buffer.BitstreamVersion);
         
         var geometryTypeResult = GetEncodedGeometryType(tempBuffer);
         if (!geometryTypeResult.Ok)
@@ -111,11 +111,12 @@ public class DracoDecoder
 
     private Status DecodePointCloudInternal(DecoderBuffer buffer, PointCloud pointCloud)
     {
-        // Read header (same as GetEncodedGeometryType but don't check type)
+        // Read header first
         var geometryTypeResult = GetEncodedGeometryType(buffer);
         if (!geometryTypeResult.Ok)
             return geometryTypeResult.Status;
         
+        // For point clouds, read number of points (DecodeGeometryData)
         if (!buffer.Decode(out uint numPoints))
             return Status.IoError("Failed to read number of points");
 
@@ -133,12 +134,12 @@ public class DracoDecoder
 
     private Status DecodeMeshInternal(DecoderBuffer buffer, Mesh mesh)
     {
-        // Read header (same as GetEncodedGeometryType but don't check type)
+        // Read header first
         var geometryTypeResult = GetEncodedGeometryType(buffer);
         if (!geometryTypeResult.Ok)
             return geometryTypeResult.Status;
         
-        // For meshes, decode connectivity first (this also sets num_points)
+        // For meshes, decode connectivity first (this also sets num_points and reads faces)
         var meshDecoder = new SequentialMeshDecoder(mesh, buffer, buffer.BitstreamVersion);
         var connectivityResult = meshDecoder.DecodeConnectivity();
         if (!connectivityResult.Ok)
@@ -146,7 +147,9 @@ public class DracoDecoder
 
         Console.WriteLine($"[DecodeMeshInternal] After connectivity: numPoints={mesh.NumPoints}, numFaces={mesh.NumFaces}, buffer position: {buffer.DecodedSize}");
 
-        // Then read num_attributes_decoders
+        // For mesh, PointCloudDecoder::DecodeGeometryData() is a no-op (just returns true)
+        // So we go straight to DecodePointAttributes which reads num_attributes_decoders
+        
         if (!buffer.Decode(out byte numAttributesDecoders))
             return Status.IoError("Failed to read number of attributes decoders");
         
