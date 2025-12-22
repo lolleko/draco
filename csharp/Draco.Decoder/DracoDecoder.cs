@@ -139,7 +139,16 @@ public class DracoDecoder
         if (!geometryTypeResult.Ok)
             return geometryTypeResult.Status;
         
-        // For meshes, decode connectivity first (this reads numFaces, numPoints and face indices)
+        // Check encoder method:
+        // 0 = MESH_SEQUENTIAL_ENCODING (supported)
+        // 1 = MESH_EDGEBREAKER_ENCODING (not yet implemented)
+        byte encoderMethod = buffer.GetData()[8]; // encoder_method is at byte 8 in header
+        if (encoderMethod != 0)
+        {
+            return Status.DracoError($"Unsupported mesh encoder method: {encoderMethod}. Only sequential encoding (0) is currently supported. Edgebreaker encoding (1) requires additional implementation.");
+        }
+        
+        // For meshes with sequential encoding, decode connectivity first (reads numFaces, numPoints and face indices)
         // This matches C++ mesh_sequential_decoder.cc DecodeConnectivity()
         var meshDecoder = new SequentialMeshDecoder(mesh, buffer, buffer.BitstreamVersion);
         var connectivityResult = meshDecoder.DecodeConnectivity();
