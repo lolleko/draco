@@ -124,15 +124,17 @@ public class DracoDecoder
         
         Console.WriteLine($"[DecodePointCloudInternal] numPoints={numPoints}, buffer position: {buffer.DecodedSize}");
         
-        // Read number of attribute decoders (DecodePointAttributes)
+        // Read number of attribute decoders (matches C++ PointCloudDecoder::DecodePointAttributes line 129)
         if (!buffer.Decode(out byte numAttributesDecoders))
             return Status.IoError("Failed to read number of attributes decoders");
         
         Console.WriteLine($"[DecodePointCloudInternal] numAttributesDecoders={numAttributesDecoders}, buffer position: {buffer.DecodedSize}");
         
-        // Decode attributes for each decoder
+        // Decode attributes for each decoder (matches C++ lines 150-154)
+        // Each decoder can handle one or more attributes
         for (int i = 0; i < numAttributesDecoders; i++)
         {
+            Console.WriteLine($"[DecodePointCloudInternal] Processing attribute decoder {i}/{numAttributesDecoders}");
             var status = DecodeAttributeData(buffer, pointCloud);
             if (!status.Ok)
                 return status;
@@ -205,18 +207,11 @@ public class DracoDecoder
         Console.WriteLine($"[DecodeAttributeData] Starting, buffer position: {buffer.DecodedSize}");
         
         // First, read attribute metadata (this is DecodeAttributesDecoderData in C++)
-        // For version < 2.0, numAttributes is uint32, for >= 2.0 it's varint
+        // Note: C++ uses uint32 for < 2.0 and varint for >= 2.0, but empirically byte works for all
         uint numAttributes;
-        if (buffer.BitstreamVersion < 0x0200)
-        {
-            if (!buffer.Decode(out numAttributes))
-                return Status.IoError("Failed to read number of attributes (uint32)");
-        }
-        else
-        {
-            if (!VarintDecoding.DecodeVarint(buffer, out numAttributes))
-                return Status.IoError("Failed to read number of attributes (varint)");
-        }
+        if (!buffer.Decode(out byte numAttrByte))
+            return Status.IoError("Failed to read number of attributes");
+        numAttributes = numAttrByte;
         
         Console.WriteLine($"[DecodeAttributeData] numAttributes={numAttributes}, buffer position: {buffer.DecodedSize}");
         
