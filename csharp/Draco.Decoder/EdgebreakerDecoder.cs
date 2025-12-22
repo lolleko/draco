@@ -66,6 +66,8 @@ namespace Draco.Decoder
             mesh.NumPoints = numVertices;
             mesh.SetNumFaces(numFaces);
 
+            Console.WriteLine($"Edgebreaker: numVertices={numVertices}, numFaces={numFaces}, numEncodedSymbols={numEncodedSymbols}");
+
             if (numFaces == 0)
             {
                 return StatusOr<bool>.FromValue(true);
@@ -158,24 +160,37 @@ namespace Draco.Decoder
         private StatusOr<bool> DecodeSymbols(List<EdgebreakerSymbol> symbols, int numSplitSymbols)
         {
             // Simplified edgebreaker decoding
-            // Create initial face
+            // The edgebreaker algorithm processes symbols in reverse order (Spirale Reversi)
+            // and builds the mesh topology as it goes
+            
             int currentVertex = 0;
             int currentFace = 0;
             
-            // Create first triangle
-            cornerToVertex[0] = currentVertex++;
-            cornerToVertex[1] = currentVertex++;
-            cornerToVertex[2] = currentVertex++;
+            if (numFaces == 0)
+            {
+                return StatusOr<bool>.FromValue(true);
+            }
             
-            vertexCorners[cornerToVertex[0]] = 0;
-            vertexCorners[cornerToVertex[1]] = 1;
-            vertexCorners[cornerToVertex[2]] = 2;
+            // Create first triangle with 3 new vertices
+            if (currentVertex + 3 > numVertices)
+            {
+                return Status.DracoError("Not enough vertices for initial triangle");
+            }
             
-            vertexVisited[cornerToVertex[0]] = true;
-            vertexVisited[cornerToVertex[1]] = true;
-            vertexVisited[cornerToVertex[2]] = true;
+            cornerToVertex[0] = currentVertex;
+            cornerToVertex[1] = currentVertex + 1;
+            cornerToVertex[2] = currentVertex + 2;
+            
+            vertexCorners[currentVertex] = 0;
+            vertexCorners[currentVertex + 1] = 1;
+            vertexCorners[currentVertex + 2] = 2;
+            
+            vertexVisited[currentVertex] = true;
+            vertexVisited[currentVertex + 1] = true;
+            vertexVisited[currentVertex + 2] = true;
             faceVisited[0] = true;
-
+            
+            currentVertex += 3;
             int activeCorner = 0;
             currentFace = 1;
 
@@ -189,6 +204,11 @@ namespace Draco.Decoder
                     case EdgebreakerSymbol.C:
                         // Create new triangle sharing edge, add one new vertex
                         {
+                            if (currentVertex >= numVertices)
+                            {
+                                return Status.DracoError($"C symbol: Not enough vertices (need {currentVertex + 1}, have {numVertices})");
+                            }
+                            
                             int corner = currentFace * 3;
                             int v0 = cornerToVertex[activeCorner];
                             int v1 = cornerToVertex[Next(activeCorner)];
@@ -214,6 +234,11 @@ namespace Draco.Decoder
                     case EdgebreakerSymbol.R:
                         // Right turn - share two vertices, create face to the right
                         {
+                            if (currentVertex >= numVertices)
+                            {
+                                return Status.DracoError($"R symbol: Not enough vertices (need {currentVertex + 1}, have {numVertices})");
+                            }
+                            
                             int corner = currentFace * 3;
                             int v1 = cornerToVertex[Next(activeCorner)];
                             int v2 = cornerToVertex[Previous(activeCorner)];
@@ -239,6 +264,11 @@ namespace Draco.Decoder
                     case EdgebreakerSymbol.L:
                         // Left turn - share two vertices, create face to the left
                         {
+                            if (currentVertex >= numVertices)
+                            {
+                                return Status.DracoError($"L symbol: Not enough vertices (need {currentVertex + 1}, have {numVertices})");
+                            }
+                            
                             int corner = currentFace * 3;
                             int v0 = cornerToVertex[activeCorner];
                             int v1 = cornerToVertex[Next(activeCorner)];
@@ -282,6 +312,11 @@ namespace Draco.Decoder
                     case EdgebreakerSymbol.S:
                         // Split - topology split, shares edge with previous geometry
                         {
+                            if (currentVertex >= numVertices)
+                            {
+                                return Status.DracoError($"S symbol: Not enough vertices (need {currentVertex + 1}, have {numVertices})");
+                            }
+                            
                             int corner = currentFace * 3;
                             int v0 = cornerToVertex[activeCorner];
                             int v1 = cornerToVertex[Next(activeCorner)];
