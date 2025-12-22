@@ -64,7 +64,11 @@ public class DracoDecoder
 
     public StatusOr<PointCloud> DecodePointCloudFromBuffer(DecoderBuffer buffer)
     {
-        var geometryTypeResult = GetEncodedGeometryType(buffer);
+        // Check geometry type on a copy of the buffer
+        var tempBuffer = new DecoderBuffer();
+        tempBuffer.Init(buffer.data_, buffer.data_head_);
+        
+        var geometryTypeResult = GetEncodedGeometryType(tempBuffer);
         if (!geometryTypeResult.Ok)
             return geometryTypeResult.Status;
 
@@ -73,6 +77,7 @@ public class DracoDecoder
             geometryType != EncodedGeometryType.TriangularMesh)
             return Status.DracoError($"Invalid geometry type: {geometryType}");
 
+        // Now decode with the original buffer (header will be read again)
         var pointCloud = new PointCloud();
         var status = DecodePointCloudInternal(buffer, pointCloud);
         if (!status.Ok)
@@ -83,7 +88,11 @@ public class DracoDecoder
 
     public StatusOr<Mesh> DecodeMeshFromBuffer(DecoderBuffer buffer)
     {
-        var geometryTypeResult = GetEncodedGeometryType(buffer);
+        // Check geometry type on a copy of the buffer
+        var tempBuffer = new DecoderBuffer();
+        tempBuffer.Init(buffer.data_, buffer.data_head_);
+        
+        var geometryTypeResult = GetEncodedGeometryType(tempBuffer);
         if (!geometryTypeResult.Ok)
             return geometryTypeResult.Status;
 
@@ -91,6 +100,7 @@ public class DracoDecoder
         if (geometryType != EncodedGeometryType.TriangularMesh)
             return Status.DracoError("Input data is not a triangular mesh");
 
+        // Now decode with the original buffer (header will be read again)
         var mesh = new Mesh();
         var status = DecodeMeshInternal(buffer, mesh);
         if (!status.Ok)
@@ -101,6 +111,11 @@ public class DracoDecoder
 
     private Status DecodePointCloudInternal(DecoderBuffer buffer, PointCloud pointCloud)
     {
+        // Read header (same as GetEncodedGeometryType but don't check type)
+        var geometryTypeResult = GetEncodedGeometryType(buffer);
+        if (!geometryTypeResult.Ok)
+            return geometryTypeResult.Status;
+        
         if (!buffer.Decode(out uint numPoints))
             return Status.IoError("Failed to read number of points");
 
@@ -118,6 +133,11 @@ public class DracoDecoder
 
     private Status DecodeMeshInternal(DecoderBuffer buffer, Mesh mesh)
     {
+        // Read header (same as GetEncodedGeometryType but don't check type)
+        var geometryTypeResult = GetEncodedGeometryType(buffer);
+        if (!geometryTypeResult.Ok)
+            return geometryTypeResult.Status;
+        
         // For meshes, decode connectivity first (this also sets num_points)
         var meshDecoder = new SequentialMeshDecoder(mesh, buffer, buffer.BitstreamVersion);
         var connectivityResult = meshDecoder.DecodeConnectivity();
