@@ -108,19 +108,10 @@ public class DracoDecoder
         
         Console.WriteLine($"[DecodePointCloudInternal] numPoints={numPoints}, buffer position: {buffer.DecodedSize}");
         
-        if (!buffer.Decode(out byte numAttributesDecoders))
-            return Status.IoError("Failed to read number of attributes decoders");
-        
-        Console.WriteLine($"[DecodePointCloudInternal] numAttributesDecoders={numAttributesDecoders}, buffer position: {buffer.DecodedSize}");
-        
-        // Support multiple attribute decoders
-        // Each decoder handles a set of attributes
-        for (int i = 0; i < numAttributesDecoders; i++)
-        {
-            var status = DecodeAttributeData(buffer, pointCloud);
-            if (!status.Ok)
-                return status;
-        }
+        // Decode attributes (point cloud sequential decoder creates one attributes decoder)
+        var status = DecodeAttributeData(buffer, pointCloud);
+        if (!status.Ok)
+            return status;
         
         return Status.OkStatus();
     }
