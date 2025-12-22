@@ -1,0 +1,323 @@
+using System;
+using System.Collections.Generic;
+
+namespace Draco.Decoder
+{
+    public enum EdgebreakerSymbol
+    {
+        C = 0,  // Continue - most common
+        S = 1,  // Split
+        L = 2,  // Left
+        R = 3,  // Right
+        E = 4,  // End
+        Invalid = 5
+    }
+
+    public class EdgebreakerMeshDecoder
+    {
+        private readonly Mesh mesh;
+        private readonly DecoderBuffer buffer;
+        
+        private List<int> cornerToVertex = new List<int>();
+        private List<int> vertexCorners = new List<int>();
+        private List<bool> vertexVisited;
+        private List<bool> faceVisited;
+        
+        private int numVertices;
+        private int numFaces;
+
+        public EdgebreakerMeshDecoder(Mesh mesh, DecoderBuffer buffer)
+        {
+            this.mesh = mesh;
+            this.buffer = buffer;
+        }
+
+        public StatusOr<bool> DecodeConnectivity()
+        {
+            // Read traversal decoder type
+            if (!buffer.Decode(out byte traversalDecoderType))
+                return Status.IoError("Failed to read traversal decoder type");
+            
+            // Read number of vertices and faces
+            if (buffer.BitstreamVersion < 0x0202)
+            {
+                if (!buffer.Decode(out uint numVerts))
+                    return Status.IoError("Failed to read number of vertices");
+                if (!buffer.Decode(out uint numFcs))
+                    return Status.IoError("Failed to read number of faces");
+                numVertices = (int)numVerts;
+                numFaces = (int)numFcs;
+            }
+            else
+            {
+                if (!VarintDecoding.DecodeVarint(buffer, out uint numVerts))
+                    return Status.IoError("Failed to read number of vertices");
+                if (!VarintDecoding.DecodeVarint(buffer, out uint numFcs))
+                    return Status.IoError("Failed to read number of faces");
+                numVertices = (int)numVerts;
+                numFaces = (int)numFcs;
+            }
+
+            if (numVertices < 0 || numFaces < 0)
+            {
+                return Status.DracoError("Invalid vertex/face count in edgebreaker decoder");
+            }
+
+            mesh.NumPoints = numVertices;
+            mesh.SetNumFaces(numFaces);
+
+            if (numFaces == 0)
+            {
+                return StatusOr<bool>.FromValue(true);
+            }
+
+            // Initialize corner table
+            cornerToVertex = new List<int>(new int[numFaces * 3]);
+            vertexCorners = new List<int>(new int[numVertices]);
+            for (int i = 0; i < numVertices; i++)
+            {
+                vertexCorners[i] = -1;
+            }
+
+            vertexVisited = new List<bool>(new bool[numVertices]);
+            faceVisited = new List<bool>(new bool[numFaces]);
+
+            // Read number of encoded symbols
+            if (!VarintDecoding.DecodeVarint(buffer, out uint numEncodedSymbols))
+                return Status.IoError("Failed to read number of encoded symbols");
+
+            // Read number of split symbols (topology changes)
+            if (!VarintDecoding.DecodeVarint(buffer, out uint numSplitSymbols))
+                return Status.IoError("Failed to read number of split symbols");
+
+            // For simplified implementation, we'll decode symbols using simple bit reading
+            // Standard edgebreaker uses: C=0(1bit), S=100(3bits), L=110(3bits), R=101(3bits), E=111(3bits)
+            List<EdgebreakerSymbol> symbols = new List<EdgebreakerSymbol>();
+            
+            // Read encoded symbols
+            for (int i = 0; i < numEncodedSymbols; i++)
+            {
+                EdgebreakerSymbol symbol = ReadSymbol();
+                if (symbol == EdgebreakerSymbol.Invalid)
+                {
+                    return Status.DracoError("Invalid edgebreaker symbol");
+                }
+                symbols.Add(symbol);
+            }
+
+            // Decode the mesh connectivity using edgebreaker algorithm
+            var status = DecodeSymbols(symbols, (int)numSplitSymbols);
+            if (!status.Ok)
+            {
+                return status;
+            }
+
+            // Build face array using SetFace method
+            for (int f = 0; f < numFaces; f++)
+            {
+                int corner = f * 3;
+                mesh.SetFace(f, new Face(cornerToVertex[corner + 0], cornerToVertex[corner + 1], cornerToVertex[corner + 2]));
+            }
+
+            return StatusOr<bool>.FromValue(true);
+        }
+
+        private EdgebreakerSymbol ReadSymbol()
+        {
+            // Read edgebreaker symbols with variable bit-length encoding
+            // C = 0 (1 bit)
+            // S, L, R, E = 1xx (3 bits)
+            
+            if (!buffer.DecodeLeastSignificantBits32(1, out uint bit))
+                return EdgebreakerSymbol.Invalid;
+                
+            if (bit == 0)
+            {
+                return EdgebreakerSymbol.C;
+            }
+
+            // Read next 2 bits to distinguish S, L, R, E
+            if (!buffer.DecodeLeastSignificantBits32(2, out uint bits))
+                return EdgebreakerSymbol.Invalid;
+                
+            switch (bits)
+            {
+                case 0: return EdgebreakerSymbol.S;  // 100
+                case 1: return EdgebreakerSymbol.R;  // 101
+                case 2: return EdgebreakerSymbol.L;  // 110
+                case 3: return EdgebreakerSymbol.E;  // 111
+                default: return EdgebreakerSymbol.Invalid;
+            }
+        }
+
+        private StatusOr<bool> DecodeSymbols(List<EdgebreakerSymbol> symbols, int numSplitSymbols)
+        {
+            // Simplified edgebreaker decoding
+            // Create initial face
+            int currentVertex = 0;
+            int currentFace = 0;
+            
+            // Create first triangle
+            cornerToVertex[0] = currentVertex++;
+            cornerToVertex[1] = currentVertex++;
+            cornerToVertex[2] = currentVertex++;
+            
+            vertexCorners[cornerToVertex[0]] = 0;
+            vertexCorners[cornerToVertex[1]] = 1;
+            vertexCorners[cornerToVertex[2]] = 2;
+            
+            vertexVisited[cornerToVertex[0]] = true;
+            vertexVisited[cornerToVertex[1]] = true;
+            vertexVisited[cornerToVertex[2]] = true;
+            faceVisited[0] = true;
+
+            int activeCorner = 0;
+            currentFace = 1;
+
+            // Process each symbol
+            for (int i = 0; i < symbols.Count && currentFace < numFaces; i++)
+            {
+                EdgebreakerSymbol symbol = symbols[i];
+
+                switch (symbol)
+                {
+                    case EdgebreakerSymbol.C:
+                        // Create new triangle sharing edge, add one new vertex
+                        {
+                            int corner = currentFace * 3;
+                            int v0 = cornerToVertex[activeCorner];
+                            int v1 = cornerToVertex[Next(activeCorner)];
+                            
+                            cornerToVertex[corner + 0] = currentVertex;
+                            cornerToVertex[corner + 1] = v0;
+                            cornerToVertex[corner + 2] = v1;
+                            
+                            if (vertexCorners[currentVertex] == -1)
+                            {
+                                vertexCorners[currentVertex] = corner;
+                            }
+                            
+                            vertexVisited[currentVertex] = true;
+                            faceVisited[currentFace] = true;
+                            
+                            activeCorner = corner;
+                            currentVertex++;
+                            currentFace++;
+                        }
+                        break;
+
+                    case EdgebreakerSymbol.R:
+                        // Right turn - share two vertices, create face to the right
+                        {
+                            int corner = currentFace * 3;
+                            int v1 = cornerToVertex[Next(activeCorner)];
+                            int v2 = cornerToVertex[Previous(activeCorner)];
+                            
+                            cornerToVertex[corner + 0] = currentVertex;
+                            cornerToVertex[corner + 1] = v2;
+                            cornerToVertex[corner + 2] = v1;
+                            
+                            if (vertexCorners[currentVertex] == -1)
+                            {
+                                vertexCorners[currentVertex] = corner;
+                            }
+                            
+                            vertexVisited[currentVertex] = true;
+                            faceVisited[currentFace] = true;
+                            
+                            activeCorner = corner;
+                            currentVertex++;
+                            currentFace++;
+                        }
+                        break;
+
+                    case EdgebreakerSymbol.L:
+                        // Left turn - share two vertices, create face to the left
+                        {
+                            int corner = currentFace * 3;
+                            int v0 = cornerToVertex[activeCorner];
+                            int v1 = cornerToVertex[Next(activeCorner)];
+                            
+                            cornerToVertex[corner + 0] = currentVertex;
+                            cornerToVertex[corner + 1] = v0;
+                            cornerToVertex[corner + 2] = v1;
+                            
+                            if (vertexCorners[currentVertex] == -1)
+                            {
+                                vertexCorners[currentVertex] = corner;
+                            }
+                            
+                            vertexVisited[currentVertex] = true;
+                            faceVisited[currentFace] = true;
+                            
+                            activeCorner = corner;
+                            currentVertex++;
+                            currentFace++;
+                        }
+                        break;
+
+                    case EdgebreakerSymbol.E:
+                        // End - close the current hole, share all three vertices
+                        {
+                            int corner = currentFace * 3;
+                            int v0 = cornerToVertex[activeCorner];
+                            int v1 = cornerToVertex[Next(activeCorner)];
+                            int v2 = cornerToVertex[Previous(activeCorner)];
+                            
+                            cornerToVertex[corner + 0] = v2;
+                            cornerToVertex[corner + 1] = v0;
+                            cornerToVertex[corner + 2] = v1;
+                            
+                            faceVisited[currentFace] = true;
+                            
+                            currentFace++;
+                        }
+                        break;
+
+                    case EdgebreakerSymbol.S:
+                        // Split - topology split, shares edge with previous geometry
+                        {
+                            int corner = currentFace * 3;
+                            int v0 = cornerToVertex[activeCorner];
+                            int v1 = cornerToVertex[Next(activeCorner)];
+                            
+                            cornerToVertex[corner + 0] = currentVertex;
+                            cornerToVertex[corner + 1] = v0;
+                            cornerToVertex[corner + 2] = v1;
+                            
+                            if (vertexCorners[currentVertex] == -1)
+                            {
+                                vertexCorners[currentVertex] = corner;
+                            }
+                            
+                            vertexVisited[currentVertex] = true;
+                            faceVisited[currentFace] = true;
+                            
+                            activeCorner = corner;
+                            currentVertex++;
+                            currentFace++;
+                        }
+                        break;
+                }
+            }
+
+            return StatusOr<bool>.FromValue(true);
+        }
+
+        private int Next(int corner)
+        {
+            // Get next corner in the same triangle
+            int face = corner / 3;
+            int offset = corner % 3;
+            return face * 3 + ((offset + 1) % 3);
+        }
+
+        private int Previous(int corner)
+        {
+            // Get previous corner in the same triangle
+            int face = corner / 3;
+            int offset = corner % 3;
+            return face * 3 + ((offset + 2) % 3);
+        }
+    }
+}
