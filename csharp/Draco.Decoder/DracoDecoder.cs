@@ -122,7 +122,7 @@ public class DracoDecoder
                 return status;
         }
         
-        return Status.Ok();
+        return Status.OkStatus();
     }
 
     private Status DecodeMeshInternal(DecoderBuffer buffer, Mesh mesh)
@@ -150,7 +150,7 @@ public class DracoDecoder
                 return status;
         }
         
-        return Status.Ok();
+        return Status.OkStatus();
     }
 
     private Status DecodeAttributeData(DecoderBuffer buffer, PointCloud pointCloud)
