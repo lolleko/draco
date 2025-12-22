@@ -182,13 +182,6 @@ public class DracoDecoder
         {
             var attribute = new PointAttribute();
             
-            // For version < 2.0, read uint32 attribute_id first
-            if (buffer.BitstreamVersion < 0x0200)
-            {
-                if (!buffer.Decode(out uint attributeId))
-                    return Status.IoError($"Failed to read attribute ID for attribute {i}");
-            }
-            
             if (!buffer.Decode(out byte attributeType))
                 return Status.IoError($"Failed to read attribute type for attribute {i}");
             
@@ -201,19 +194,20 @@ public class DracoDecoder
             if (!buffer.Decode(out byte normalized))
                 return Status.IoError($"Failed to read normalized for attribute {i}");
             
-            // For bitstream versions < 2.0, read custom_id (uint16)
-            ushort customId = (ushort)i;
-            if (buffer.BitstreamVersion < 0x0200)
+            // Read custom_id/unique_id based on version
+            uint customId = (uint)i;
+            if (buffer.BitstreamVersion < 0x0103)
             {
-                if (!buffer.Decode(out customId))
+                // For bitstream versions < 1.3, read custom_id as uint16
+                if (!buffer.Decode(out ushort customId16))
                     return Status.IoError($"Failed to read custom_id for attribute {i}");
+                customId = customId16;
             }
             else
             {
-                // For versions >= 2.0, read unique_id as varint
-                if (!VarintDecoding.DecodeVarint(buffer, out uint uniqueId))
+                // For versions >= 1.3, read unique_id as varint
+                if (!VarintDecoding.DecodeVarint(buffer, out customId))
                     return Status.IoError($"Failed to read unique_id for attribute {i}");
-                customId = (ushort)uniqueId;
             }
 
             Console.WriteLine($"[DecodeAttributeData] Attribute {i}: type={attributeType}, dataType={dataType}, numComponents={numComponents}, normalized={normalized}, customId={customId}, buffer position: {buffer.DecodedSize}");
