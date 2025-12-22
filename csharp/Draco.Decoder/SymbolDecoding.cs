@@ -73,45 +73,11 @@ public static class SymbolDecoding
         
         Console.WriteLine($"[DecodeTaggedSymbols] tagDecoder.StartDecoding succeeded, NumSymbols={tagDecoder.NumSymbols}, buffer position: {buffer.DecodedSize}");
         
-        // If numSymbols is 0, values are encoded using per-value bit lengths
-        if (tagDecoder.NumSymbols == 0)
+        // C++ code checks: if num_values > 0 && num_symbols == 0, return false
+        if (numValues > 0 && tagDecoder.NumSymbols == 0)
         {
-            Console.WriteLine($"[DecodeTaggedSymbols] NumSymbols is 0, reading with variable bit lengths");
-            if (!buffer.StartBitDecoding(false, out ulong _))
-            {
-                Console.WriteLine($"[DecodeTaggedSymbols] StartBitDecoding failed");
-                return false;
-            }
-            
-            // Read bit length per value
-            for (uint i = 0; i < numValues; i++)
-            {
-                // Read bit length (using 5 bits since maxBitLength=5 gives 32 possible values)
-                if (!buffer.DecodeLeastSignificantBits32(5, out uint bitLength))
-                {
-                    Console.WriteLine($"[DecodeTaggedSymbols] Failed to decode bit length for value {i}");
-                    return false;
-                }
-                
-                // Now read the actual value using the bit length
-                if (bitLength > 0)
-                {
-                    if (!buffer.DecodeLeastSignificantBits32((int)bitLength, out uint value))
-                    {
-                        Console.WriteLine($"[DecodeTaggedSymbols] Failed to decode value {i} with bitLength {bitLength}");
-                        return false;
-                    }
-                    outValues[i] = value;
-                }
-                else
-                {
-                    outValues[i] = 0;
-                }
-            }
-            
-            buffer.EndBitDecoding();
-            Console.WriteLine($"[DecodeTaggedSymbols] Successfully decoded {numValues} values with variable bit lengths, buffer position: {buffer.DecodedSize}");
-            return true;
+            Console.WriteLine($"[DecodeTaggedSymbols] Error: numValues > 0 but NumSymbols is 0");
+            return false;
         }
         
         if (!buffer.StartBitDecoding(false, out ulong _))
