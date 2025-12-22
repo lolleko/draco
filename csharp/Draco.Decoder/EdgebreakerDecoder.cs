@@ -38,32 +38,62 @@ namespace Draco.Decoder
             if (!buffer.Decode(out byte traversalDecoderType))
                 return Status.IoError("Failed to read traversal decoder type");
             
-            // Read number of vertices and faces
+            // For versions < 2.2, read num_new_vertices first
+            int numNewVertices = 0;
             if (buffer.BitstreamVersion < 0x0202)
             {
-                if (!buffer.Decode(out uint numVerts))
-                    return Status.IoError("Failed to read number of vertices");
+                if (buffer.BitstreamVersion < 0x0200)
+                {
+                    if (!buffer.Decode(out uint numNewVerts))
+                        return Status.IoError("Failed to read num_new_vertices");
+                    numNewVertices = (int)numNewVerts;
+                }
+                else
+                {
+                    if (!VarintDecoding.DecodeVarint(buffer, out uint numNewVerts))
+                        return Status.IoError("Failed to read num_new_vertices");
+                    numNewVertices = (int)numNewVerts;
+                }
+            }
+            
+            // Read number of encoded vertices
+            int numEncodedVertices;
+            if (buffer.BitstreamVersion < 0x0200)
+            {
+                if (!buffer.Decode(out uint numEncVerts))
+                    return Status.IoError("Failed to read num_encoded_vertices");
+                numEncodedVertices = (int)numEncVerts;
+            }
+            else
+            {
+                if (!VarintDecoding.DecodeVarint(buffer, out uint numEncVerts))
+                    return Status.IoError("Failed to read num_encoded_vertices");
+                numEncodedVertices = (int)numEncVerts;
+            }
+            
+            // Read number of faces
+            if (buffer.BitstreamVersion < 0x0200)
+            {
                 if (!buffer.Decode(out uint numFcs))
                     return Status.IoError("Failed to read number of faces");
-                numVertices = (int)numVerts;
                 numFaces = (int)numFcs;
             }
             else
             {
-                if (!VarintDecoding.DecodeVarint(buffer, out uint numVerts))
-                    return Status.IoError("Failed to read number of vertices");
                 if (!VarintDecoding.DecodeVarint(buffer, out uint numFcs))
                     return Status.IoError("Failed to read number of faces");
-                numVertices = (int)numVerts;
                 numFaces = (int)numFcs;
             }
 
-            if (numVertices < 0 || numFaces < 0)
+            if (numEncodedVertices < 0 || numFaces < 0)
             {
-                return Status.DracoError("Invalid vertex/face count in edgebreaker decoder");
+                return Status.DracoError("Invalid encoded vertices/face count in edgebreaker decoder");
             }
-
-            mesh.NumPoints = numVertices;
+            
+            // The actual number of vertices is computed during decoding
+            // For now, allocate based on faces * 3 (upper bound)
+            numVertices = numEncodedVertices + numFaces;  // Conservative estimate
+            
             mesh.SetNumFaces(numFaces);
 
             if (numFaces == 0)
@@ -86,7 +116,7 @@ namespace Draco.Decoder
             if (!VarintDecoding.DecodeVarint(buffer, out uint numEncodedSymbols))
                 return Status.IoError("Failed to read number of encoded symbols");
             
-            Console.WriteLine($"Edgebreaker: numVertices={numVertices}, numFaces={numFaces}, numEncodedSymbols={numEncodedSymbols}");
+            Console.WriteLine($"Edgebreaker: numEncodedVertices={numEncodedVertices}, numFaces={numFaces}, numEncodedSymbols={numEncodedSymbols}");
 
             // Read number of split symbols (topology changes)
             if (!VarintDecoding.DecodeVarint(buffer, out uint numSplitSymbols))
@@ -340,6 +370,9 @@ namespace Draco.Decoder
                         break;
                 }
             }
+            
+            // Set the actual number of vertices that were used
+            mesh.NumPoints = currentVertex;
 
             return StatusOr<bool>.FromValue(true);
         }
