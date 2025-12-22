@@ -75,10 +75,30 @@ public static class SymbolDecoding
         
         Console.WriteLine($"[DecodeTaggedSymbols] tagDecoder.StartDecoding succeeded, NumSymbols={tagDecoder.NumSymbols}, buffer position: {buffer.DecodedSize}");
         
-        if (numValues > 0 && tagDecoder.NumSymbols == 0)
+        // If numSymbols is 0, values are stored directly as bits (no symbol encoding)
+        if (tagDecoder.NumSymbols == 0)
         {
-            Console.WriteLine($"[DecodeTaggedSymbols] NumSymbols is 0 but numValues={numValues}");
-            return false;
+            Console.WriteLine($"[DecodeTaggedSymbols] NumSymbols is 0, reading values directly as bits");
+            if (!buffer.StartBitDecoding(false, out ulong _))
+            {
+                Console.WriteLine($"[DecodeTaggedSymbols] StartBitDecoding failed");
+                return false;
+            }
+            
+            // Read values directly - assuming 32-bit integers stored bit-by-bit
+            for (uint i = 0; i < numValues; i++)
+            {
+                if (!buffer.DecodeLeastSignificantBits32(32, out uint value))
+                {
+                    Console.WriteLine($"[DecodeTaggedSymbols] Failed to decode value {i}");
+                    return false;
+                }
+                outValues[i] = value;
+            }
+            
+            buffer.EndBitDecoding();
+            Console.WriteLine($"[DecodeTaggedSymbols] Successfully decoded {numValues} values directly, buffer position: {buffer.DecodedSize}");
+            return true;
         }
         
         if (!buffer.StartBitDecoding(false, out ulong _))

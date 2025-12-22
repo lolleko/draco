@@ -113,11 +113,16 @@ public class DracoDecoder
         
         Console.WriteLine($"[DecodePointCloudInternal] numAttributesDecoders={numAttributesDecoders}, buffer position: {buffer.DecodedSize}");
         
-        if (numAttributesDecoders != 1)
-            return Status.DracoError($"Only single attributes decoder supported, got {numAttributesDecoders}");
-
-        // Attribute metadata will be read in DecodeAttributeData
-        return DecodeAttributeData(buffer, pointCloud);
+        // Support multiple attribute decoders
+        // Each decoder handles a set of attributes
+        for (int i = 0; i < numAttributesDecoders; i++)
+        {
+            var status = DecodeAttributeData(buffer, pointCloud);
+            if (!status.Ok)
+                return status;
+        }
+        
+        return Status.Ok();
     }
 
     private Status DecodeMeshInternal(DecoderBuffer buffer, Mesh mesh)
@@ -136,11 +141,16 @@ public class DracoDecoder
         
         Console.WriteLine($"[DecodeMeshInternal] numAttributesDecoders={numAttributesDecoders}, buffer position: {buffer.DecodedSize}");
         
-        if (numAttributesDecoders != 1)
-            return Status.DracoError($"Only single attributes decoder supported, got {numAttributesDecoders}");
-
-        // Then decode attributes
-        return DecodeAttributeData(buffer, mesh);
+        // Support multiple attribute decoders
+        // Each decoder handles a set of attributes
+        for (int i = 0; i < numAttributesDecoders; i++)
+        {
+            var status = DecodeAttributeData(buffer, mesh);
+            if (!status.Ok)
+                return status;
+        }
+        
+        return Status.Ok();
     }
 
     private Status DecodeAttributeData(DecoderBuffer buffer, PointCloud pointCloud)
@@ -240,6 +250,9 @@ public class DracoDecoder
                     decoder = new SequentialNormalAttributeDecoder();
                     break;
                 case 6: // KD_TREE (uses quantization decoder for sequential decoding)
+                    decoder = new SequentialQuantizationAttributeDecoder();
+                    break;
+                case 14: // Another KD-Tree variant  
                     decoder = new SequentialQuantizationAttributeDecoder();
                     break;
                 default:
