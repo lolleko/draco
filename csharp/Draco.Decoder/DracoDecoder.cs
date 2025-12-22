@@ -182,6 +182,13 @@ public class DracoDecoder
         {
             var attribute = new PointAttribute();
             
+            // For version < 2.0, read uint32 attribute_id first
+            if (buffer.BitstreamVersion < 0x0200)
+            {
+                if (!buffer.Decode(out uint attributeId))
+                    return Status.IoError($"Failed to read attribute ID for attribute {i}");
+            }
+            
             if (!buffer.Decode(out byte attributeType))
                 return Status.IoError($"Failed to read attribute type for attribute {i}");
             
