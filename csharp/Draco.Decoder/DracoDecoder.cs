@@ -190,8 +190,34 @@ public class DracoDecoder
         Console.WriteLine($"[DecodeMeshInternal] After connectivity: numPoints={mesh.NumPoints}, numFaces={mesh.NumFaces}, buffer position: {buffer.DecodedSize}");
         Console.WriteLine($"[DecodeMeshInternal] numAttributesDecoders={numAttributesDecoders}, buffer position: {buffer.DecodedSize}");
         
-        // Support multiple attribute decoders
-        // Each decoder handles a set of attributes
+        // For edgebreaker, first read decoder-specific data for all decoders
+        // (This is the CreateAttributesDecoder step in C++)
+        if (encoderMethod == 1)
+        {
+            for (int i = 0; i < numAttributesDecoders; i++)
+            {
+                // Read att_data_id and decoder_type for this attribute decoder
+                if (!buffer.Decode(out sbyte attDataId))
+                    return Status.IoError("Failed to read att_data_id");
+                
+                if (!buffer.Decode(out byte decoderType))
+                    return Status.IoError("Failed to read decoder_type");
+                
+                Console.WriteLine($"[DecodeMeshInternal] Decoder {i}: attDataId={attDataId}, decoderType={decoderType}");
+                
+                // For version >= 1.2, read traversal method
+                if (buffer.BitstreamVersion >= 0x0102)
+                {
+                    if (!buffer.Decode(out byte traversalMethod))
+                        return Status.IoError("Failed to read traversal_method");
+                    
+                    Console.WriteLine($"[DecodeMeshInternal] Decoder {i}: traversalMethod={traversalMethod}");
+                }
+            }
+        }
+        
+        // Now decode attribute data for all decoders
+        // (This is the DecodeAttributesDecoderData step in C++)
         for (int i = 0; i < numAttributesDecoders; i++)
         {
             var status = DecodeAttributeData(buffer, mesh);
@@ -206,7 +232,7 @@ public class DracoDecoder
     {
         Console.WriteLine($"[DecodeAttributeData] Starting, buffer position: {buffer.DecodedSize}");
         
-        // First, read attribute metadata (this is DecodeAttributesDecoderData in C++)
+        // Read standard attribute metadata (this is DecodeAttributesDecoderData in C++)
         uint numAttributes;
         if (buffer.BitstreamVersion < 0x0200)
         {
