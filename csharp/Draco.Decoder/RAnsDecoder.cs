@@ -170,11 +170,15 @@ public class RAnsSymbolDecoder
         
         Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] bytesEncoded={bytesEncoded}, buffer.RemainingSize={buffer.RemainingSize}, buffer position: {buffer.DecodedSize}");
         
-        // Allow bytesEncoded to be larger than RemainingSize for some edge cases
-        // The actual buffer usage will be validated during decoding
+        // Validate that bytesEncoded doesn't exceed remaining buffer size
+        if (bytesEncoded > (ulong)buffer.RemainingSize)
+        {
+            Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] bytesEncoded ({bytesEncoded}) > RemainingSize ({buffer.RemainingSize})");
+            return false;
+        }
         
         this.buffer = buffer.GetDataAtCurrentPosition();
-        int offset = (int)Math.Min(bytesEncoded, (ulong)buffer.RemainingSize);
+        int offset = (int)bytesEncoded;
         
         Console.WriteLine($"[RAnsSymbolDecoder.StartDecoding] offset={offset}");
         
