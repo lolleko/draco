@@ -17,22 +17,55 @@ namespace Draco.Decoder;
 public class SequentialQuantizationAttributeDecoder : SequentialIntegerAttributeDecoder
 {
     private AttributeQuantizationTransform quantizationTransform;
+    private bool quantizationDataDecoded;
     
     public SequentialQuantizationAttributeDecoder()
     {
         quantizationTransform = new AttributeQuantizationTransform();
+        quantizationDataDecoded = false;
+    }
+    
+    public override bool DecodePortableAttribute(int numPoints, DecoderBuffer buffer)
+    {
+        // Call base implementation to decode integer values
+        if (!base.DecodePortableAttribute(numPoints, buffer))
+            return false;
+        
+        // For bitstream version < 2.0, decode quantization data immediately after integer values
+        if (buffer.BitstreamVersion < 0x0200)
+        {
+            var portAttr = GetPortableAttribute();
+            if (portAttr == null)
+            {
+                portAttr = attribute;
+            }
+            
+            if (!quantizationTransform.InitFromAttribute(buffer, portAttr.NumComponents))
+                return false;
+            
+            quantizationDataDecoded = true;
+        }
+        
+        return true;
     }
     
     public override bool DecodeDataNeededByPortableTransform(DecoderBuffer buffer)
     {
-        var portAttr = GetPortableAttribute();
-        if (portAttr == null)
+        // For bitstream version >= 2.0, decode quantization data here
+        // For older versions, it was already decoded in DecodePortableAttribute
+        if (buffer.BitstreamVersion >= 0x0200 && !quantizationDataDecoded)
         {
-            portAttr = attribute;
+            var portAttr = GetPortableAttribute();
+            if (portAttr == null)
+            {
+                portAttr = attribute;
+            }
+            
+            if (!quantizationTransform.InitFromAttribute(buffer, portAttr.NumComponents))
+                return false;
+            
+            quantizationDataDecoded = true;
         }
-        
-        if (!quantizationTransform.InitFromAttribute(buffer, portAttr.NumComponents))
-            return false;
         
         return true;
     }
