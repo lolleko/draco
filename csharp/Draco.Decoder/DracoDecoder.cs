@@ -207,11 +207,19 @@ public class DracoDecoder
         Console.WriteLine($"[DecodeAttributeData] Starting, buffer position: {buffer.DecodedSize}");
         
         // First, read attribute metadata (this is DecodeAttributesDecoderData in C++)
-        // Note: C++ uses uint32 for < 2.0 and varint for >= 2.0, but empirically byte works for all
         uint numAttributes;
-        if (!buffer.Decode(out byte numAttrByte))
-            return Status.IoError("Failed to read number of attributes");
-        numAttributes = numAttrByte;
+        if (buffer.BitstreamVersion < 0x0200)
+        {
+            // Version < 2.0: read as uint32
+            if (!buffer.Decode(out numAttributes))
+                return Status.IoError("Failed to read number of attributes");
+        }
+        else
+        {
+            // Version >= 2.0: read as varint
+            if (!VarintDecoding.DecodeVarint(buffer, out numAttributes))
+                return Status.IoError("Failed to read number of attributes");
+        }
         
         Console.WriteLine($"[DecodeAttributeData] numAttributes={numAttributes}, buffer position: {buffer.DecodedSize}");
         
@@ -266,16 +274,18 @@ public class DracoDecoder
         
         // Phase 1: Read all encoder types and create decoders
         var decoders = new SequentialAttributeDecoder[pointCloud.NumAttributes];
+        Console.WriteLine($"[DecodeAttributeData] Phase 1: Reading {pointCloud.NumAttributes} encoder types, buffer position: {buffer.DecodedSize}");
         for (int attId = 0; attId < pointCloud.NumAttributes; attId++)
         {
             var attribute = pointCloud.GetAttribute(attId);
             if (attribute == null)
                 return Status.IoError($"Attribute {attId} is null");
 
+            int posBefore = buffer.DecodedSize;
             if (!buffer.Decode(out byte encoderType))
                 return Status.IoError($"Failed to read encoder type for attribute {attId}");
             
-            Console.WriteLine($"[DecodeAttributeData] Attribute {attId}, encoderType={encoderType}, buffer position: {buffer.DecodedSize}");
+            Console.WriteLine($"[DecodeAttributeData] Attribute {attId}, encoderType={encoderType}, buffer position: {posBefore} -> {buffer.DecodedSize}");
 
             SequentialAttributeDecoder decoder;
             
@@ -306,6 +316,8 @@ public class DracoDecoder
             decoder.SetAttribute(attribute);
             decoders[attId] = decoder;
         }
+        
+        Console.WriteLine($"[DecodeAttributeData] Phase 1 complete, buffer position: {buffer.DecodedSize}");
         
         // Phase 2: Decode portable attributes for all decoders
         for (int attId = 0; attId < pointCloud.NumAttributes; attId++)

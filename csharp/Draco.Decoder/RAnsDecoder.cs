@@ -81,6 +81,7 @@ public class RAnsSymbolDecoder
             if (token == 3)
             {
                 uint offset = (uint)(probData >> 2);
+                Console.WriteLine($"[Create] Symbol {i}: token=3, offset={offset}, probData={probData}");
                 if (i + offset >= numSymbols)
                     return false;
                 
@@ -94,12 +95,16 @@ public class RAnsSymbolDecoder
             {
                 int extraBytes = token;
                 uint prob = (uint)(probData >> 2);
+                Console.WriteLine($"[Create] Symbol {i}: token={token}, extraBytes={extraBytes}, probData={probData}, initial prob={prob}");
                 for (int b = 0; b < extraBytes; b++)
                 {
                     if (!buffer.Decode(out byte eb))
                         return false;
-                    prob |= (uint)eb << (8 * (b + 1) - 2);
+                    uint shift = (uint)(8 * (b + 1) - 2);
+                    Console.WriteLine($"[Create] Symbol {i}: Reading extra byte {b}: eb={eb}, shift={shift}");
+                    prob |= (uint)eb << (int)shift;
                 }
+                Console.WriteLine($"[Create] Symbol {i}: Final prob={prob}");
                 probabilityTable[i] = prob;
             }
         }
