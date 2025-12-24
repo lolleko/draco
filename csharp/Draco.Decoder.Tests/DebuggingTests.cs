@@ -465,4 +465,325 @@ public class DebuggingTests
     }
     
     #endregion
+    
+    #region Buffer Positioning Tests for Quantized Attributes
+    
+    [TestMethod]
+    public void Test_PcColor_Attribute0_BufferPositioning()
+    {
+        var drcPath = "../../../../../testdata/pc_color.drc";
+        var data = File.ReadAllBytes(drcPath);
+        
+        Console.WriteLine($"=== Testing attribute 0 buffer positioning in pc_color.drc ===");
+        Console.WriteLine($"File size: {data.Length} bytes");
+        Console.WriteLine($"Version: {data[5]}.{data[6]} (0x{(data[5] << 8) | data[6]:04x})");
+        
+        var buffer = new DecoderBuffer();
+        buffer.Init(data);
+        
+        var decoder = new DracoDecoder();
+        var geomTypeResult = DracoDecoder.GetEncodedGeometryType(buffer);
+        Assert.IsTrue(geomTypeResult.Ok);
+        
+        // Read basic metadata
+        Assert.IsTrue(buffer.Decode(out uint numPoints));
+        Console.WriteLine($"NumPoints: {numPoints}");
+        
+        Assert.IsTrue(buffer.Decode(out byte numAttrDecoders));
+        Console.WriteLine($"NumAttributesDecoders: {numAttrDecoders}");
+        Console.WriteLine($"Starting position for attribute metadata: {buffer.DecodedSize}");
+        
+        // This test helps us understand where attribute 0 should start and end
+        // Expected: attribute 0 (quantized, encoder type 2) should decode integer values
+        // For version >= 2.0, quantization parameters come AFTER all portable attributes
+        Console.WriteLine($"\nExpected flow for v2.2:");
+        Console.WriteLine($"1. Decode attribute 0 integer values (Phase 2)");
+        Console.WriteLine($"2. Decode attribute 1 integer values (Phase 2)");
+        Console.WriteLine($"3. Decode attribute 0 quantization params (Phase 3)");
+        Console.WriteLine($"4. Decode attribute 1 quantization params if any (Phase 3)");
+    }
+    
+    [TestMethod]
+    public void Test_CubePC_Attribute2_MaxBitLength()
+    {
+        var drcPath = "../../../../../testdata/cube_pc.drc";
+        var data = File.ReadAllBytes(drcPath);
+        
+        Console.WriteLine($"=== Testing why attribute 2 reads maxBitLength=167 in cube_pc.drc ===");
+        Console.WriteLine($"File size: {data.Length} bytes");
+        
+        // Check bytes at position 83 where maxBitLength is read
+        Console.WriteLine($"\nBytes around position 79-90:");
+        for (int i = 79; i < 90 && i < data.Length; i++)
+        {
+            Console.WriteLine($"  Position {i}: 0x{data[i]:02x} ({data[i]})");
+        }
+        
+        Console.WriteLine($"\nPosition 83 has value 0xa7 (167)");
+        Console.WriteLine($"This is way too large for maxBitLength (should be 0-18 typically)");
+        Console.WriteLine($"This suggests we're reading from the wrong buffer position");
+        Console.WriteLine($"\nLikely causes:");
+        Console.WriteLine($"1. Attribute 1 didn't consume the right amount of data");
+        Console.WriteLine($"2. There's additional data between attributes we're not reading");
+        Console.WriteLine($"3. Prediction scheme data not being read correctly");
+    }
+    
+    [TestMethod]
+    public void Test_RAns_ProbabilitySum()
+    {
+        Console.WriteLine($"=== Testing RAns probability sum validation ===");
+        
+        // The issue: cumulative probability (2192675) > precision (1048576)
+        // This happens when symbol probabilities don't sum to precision
+        
+        Console.WriteLine($"For precision = 2^20 = 1048576:");
+        Console.WriteLine($"Sum of all symbol probabilities must equal precision");
+        Console.WriteLine($"\nExample breakdown:");
+        Console.WriteLine($"  Symbol 0-60: various small probabilities");
+        Console.WriteLine($"  Symbol 61: prob=2192656");
+        Console.WriteLine($"  Total: 2192675 > 1048576 ❌");
+        
+        Console.WriteLine($"\nPossible causes:");
+        Console.WriteLine($"1. Reading probability data from wrong buffer position");
+        Console.WriteLine($"2. Probability calculation formula is wrong");
+        Console.WriteLine($"3. Extra bytes calculation for probability is incorrect");
+        Console.WriteLine($"4. numSymbols value is wrong");
+        
+        Console.WriteLine($"\nIn pc_color.drc attribute 1:");
+        Console.WriteLine($"  maxBitLength should determine precision");
+        Console.WriteLine($"  Need to trace back to see why probabilities are wrong");
+    }
+    
+    [TestMethod]
+    public void Test_CubePC_PredictionScheme()
+    {
+        var drcPath = "../../../../../testdata/cube_pc.drc";
+        var data = File.ReadAllBytes(drcPath);
+        
+        Console.WriteLine($"=== Testing prediction scheme handling in cube_pc.drc ===");
+        
+        // Attribute 1 at position 62 (after our fix)
+        Console.WriteLine($"Attribute 1 bytes:");
+        Console.WriteLine($"  Position 62: predictionSchemeMethod = {(sbyte)data[62]} (0x{data[62]:02x})");
+        Console.WriteLine($"  Position 63: predictionTransformType = {(sbyte)data[63]} (0x{data[63]:02x})");
+        Console.WriteLine($"  Position 64: compressed = {data[64]} (0x{data[64]:02x})");
+        Console.WriteLine($"  Position 65: numBytes = {data[65]} (0x{data[65]:02x})");
+        
+        Console.WriteLine($"\nWith predictionSchemeMethod=3 (TEX_COORDS_DEPRECATED):");
+        Console.WriteLine($"  - We now correctly read predictionTransformType");
+        Console.WriteLine($"  - We create a PassthroughPredictionSchemeDecoder");
+        Console.WriteLine($"  - compressed=0, numBytes=0 means no additional data");
+        Console.WriteLine($"  - Should end at position 66");
+        
+        // But we were ending at position 79 before, now at position 62+17=79
+        // Let's trace through what should happen
+        var buffer = new DecoderBuffer();
+        buffer.Init(data);
+        
+        var decoder = new DracoDecoder();
+        var result = decoder.DecodePointCloudFromBuffer(buffer);
+        
+        Console.WriteLine($"\nDecode result: {result.Status}");
+        Console.WriteLine($"Final buffer position: {buffer.DecodedSize}/{data.Length}");
+    }
+    
+    [TestMethod]
+    public void Test_Edgebreaker_AttributeDataLayout()
+    {
+        var drcPath = "../../../../../testdata/cube_att.drc";
+        var data = File.ReadAllBytes(drcPath);
+        
+        Console.WriteLine($"=== Testing edgebreaker attribute data layout ===");
+        Console.WriteLine($"File: cube_att.drc (v1.1, edgebreaker)");
+        Console.WriteLine($"File size: {data.Length} bytes");
+        
+        Console.WriteLine($"\nAfter connectivity (position 37):");
+        Console.WriteLine($"  Decoder 0: attDataId=3, decoderType=0");
+        Console.WriteLine($"  Decoder 1: attDataId=0, decoderType=0");
+        Console.WriteLine($"  Position after decoder metadata: 41");
+        
+        Console.WriteLine($"\nBytes 41-60:");
+        for (int i = 41; i < 60 && i < data.Length; i++)
+        {
+            Console.WriteLine($"  Position {i}: 0x{data[i]:02x} ({data[i]})");
+        }
+        
+        Console.WriteLine($"\nIssue: attDataId=3 but numAttributeData=2");
+        Console.WriteLine($"This means attDataId is out of bounds!");
+        Console.WriteLine($"\nPossible explanations:");
+        Console.WriteLine($"1. attDataId=-1 (encoded as 0xFF, reads as 255, but we read 3)");
+        Console.WriteLine($"2. Special handling for negative attDataId in C++");
+        Console.WriteLine($"3. File format difference for v1.1");
+        Console.WriteLine($"4. We're reading attDataId from wrong position");
+    }
+    
+    [TestMethod]
+    public void Test_KdTree_NotImplemented()
+    {
+        var drcPath = "../../../../../testdata/pc_kd_color.drc";
+        var data = File.ReadAllBytes(drcPath);
+        
+        Console.WriteLine($"=== KD-Tree decoder test ===");
+        Console.WriteLine($"File: pc_kd_color.drc");
+        Console.WriteLine($"Encoder method: {data[8]} (1 = KD-tree)");
+        
+        Console.WriteLine($"\nKD-tree encoding requires:");
+        Console.WriteLine($"1. DecodeKdTreeAttributesEncoder - NOT IMPLEMENTED");
+        Console.WriteLine($"2. KdTreeAttributesDecoder class - NOT IMPLEMENTED");
+        Console.WriteLine($"3. DynamicIntegerPointsKdTreeDecoder - NOT IMPLEMENTED");
+        Console.WriteLine($"4. FloatPointsTreeDecoder - NOT IMPLEMENTED");
+        
+        Console.WriteLine($"\nThis is a significant feature requiring:");
+        Console.WriteLine($"- KD-tree data structure implementation");
+        Console.WriteLine($"- Specialized attribute traversal");
+        Console.WriteLine($"- Different compression algorithm");
+        Console.WriteLine($"\nRecommendation: Implement in separate PR");
+        
+        var buffer = new DecoderBuffer();
+        buffer.Init(data);
+        
+        var decoder = new DracoDecoder();
+        var result = decoder.DecodePointCloudFromBuffer(buffer);
+        
+        Console.WriteLine($"\nExpected result: Fails with 'not implemented' or similar");
+        Console.WriteLine($"Actual result: {result.Status}");
+    }
+    
+    #endregion
+    
+    #region Byte-Level Comparison Tests
+    
+    [TestMethod]
+    public void Test_PcColor_ByteByByteTrace()
+    {
+        var drcPath = "../../../../../testdata/pc_color.drc";
+        var data = File.ReadAllBytes(drcPath);
+        
+        Console.WriteLine($"=== Byte-by-byte trace of pc_color.drc decode ===");
+        Console.WriteLine($"Goal: Find exact point where buffer position diverges from expected");
+        
+        var buffer = new DecoderBuffer();
+        buffer.Init(data);
+        
+        Console.WriteLine($"\nPosition 0: Start");
+        
+        var geomTypeResult = DracoDecoder.GetEncodedGeometryType(buffer);
+        Console.WriteLine($"Position {buffer.DecodedSize}: After header (geomType={geomTypeResult.Value})");
+        
+        Assert.IsTrue(buffer.Decode(out uint numPoints));
+        Console.WriteLine($"Position {buffer.DecodedSize}: After numPoints ({numPoints})");
+        
+        Assert.IsTrue(buffer.Decode(out byte numAttrDecoders));
+        Console.WriteLine($"Position {buffer.DecodedSize}: After numAttributesDecoders ({numAttrDecoders})");
+        
+        int startPos = buffer.DecodedSize;
+        Console.WriteLine($"\nAttribute metadata starts at position {startPos}");
+        Console.WriteLine($"Next bytes: {string.Join(" ", data.Skip(startPos).Take(20).Select(b => $"{b:02x}"))}");
+        
+        // Try to decode just the metadata to see format
+        Console.WriteLine($"\nAttempting to decode attribute metadata...");
+        
+        // For version >= 2.0, numAttributes is varint
+        if (!VarintDecoding.DecodeVarint(buffer, out uint numAttributes))
+        {
+            Console.WriteLine($"Failed to decode numAttributes as varint");
+        }
+        else
+        {
+            Console.WriteLine($"Position {buffer.DecodedSize}: NumAttributes = {numAttributes}");
+            
+            // Try to read first attribute metadata
+            for (int i = 0; i < Math.Min(numAttributes, 3); i++)
+            {
+                int attrStart = buffer.DecodedSize;
+                Assert.IsTrue(buffer.Decode(out byte attributeType));
+                Assert.IsTrue(buffer.Decode(out byte dataType));
+                Assert.IsTrue(buffer.Decode(out byte numComponents));
+                Assert.IsTrue(buffer.Decode(out byte normalized));
+                
+                uint uniqueId;
+                if (buffer.BitstreamVersion < 0x0103)
+                {
+                    Assert.IsTrue(buffer.Decode(out ushort uniqueId16));
+                    uniqueId = uniqueId16;
+                }
+                else
+                {
+                    Assert.IsTrue(VarintDecoding.DecodeVarint(buffer, out uniqueId));
+                }
+                
+                Console.WriteLine($"Position {buffer.DecodedSize}: Attribute {i}: type={attributeType}, dataType={dataType}, components={numComponents}, uniqueId={uniqueId}");
+            }
+        }
+    }
+    
+    [TestMethod]
+    public void Test_CubePC_EncoderTypes()
+    {
+        var drcPath = "../../../../../testdata/cube_pc.drc";
+        var data = File.ReadAllBytes(drcPath);
+        
+        Console.WriteLine($"=== Checking encoder types for cube_pc.drc ===");
+        
+        var buffer = new DecoderBuffer();
+        buffer.Init(data);
+        
+        var geomTypeResult = DracoDecoder.GetEncodedGeometryType(buffer);
+        Assert.IsTrue(geomTypeResult.Ok);
+        
+        Assert.IsTrue(buffer.Decode(out uint numPoints));
+        Assert.IsTrue(buffer.Decode(out byte numAttrDecoders));
+        
+        Console.WriteLine($"NumPoints: {numPoints}");
+        Console.WriteLine($"NumAttributesDecoders: {numAttrDecoders}");
+        
+        // Read attribute metadata
+        uint numAttributes;
+        if (buffer.BitstreamVersion < 0x0200)
+        {
+            Assert.IsTrue(buffer.Decode(out numAttributes));
+        }
+        else
+        {
+            Assert.IsTrue(VarintDecoding.DecodeVarint(buffer, out numAttributes));
+        }
+        
+        Console.WriteLine($"NumAttributes: {numAttributes}");
+        
+        // Read all attribute descriptors
+        for (int i = 0; i < numAttributes; i++)
+        {
+            Assert.IsTrue(buffer.Decode(out byte attributeType));
+            Assert.IsTrue(buffer.Decode(out byte dataType));
+            Assert.IsTrue(buffer.Decode(out byte numComponents));
+            Assert.IsTrue(buffer.Decode(out byte normalized));
+            
+            uint uniqueId;
+            if (buffer.BitstreamVersion < 0x0103)
+            {
+                Assert.IsTrue(buffer.Decode(out ushort uniqueId16));
+                uniqueId = uniqueId16;
+            }
+            else
+            {
+                Assert.IsTrue(VarintDecoding.DecodeVarint(buffer, out uniqueId));
+            }
+            
+            Console.WriteLine($"Attribute {i}: type={attributeType}, dataType={dataType}, components={numComponents}");
+        }
+        
+        Console.WriteLine($"\nBuffer position before encoder types: {buffer.DecodedSize}");
+        
+        // Read encoder types
+        for (int i = 0; i < numAttrDecoders; i++)
+        {
+            Assert.IsTrue(buffer.Decode(out byte encoderType));
+            Console.WriteLine($"Attribute {i}: encoderType={encoderType} (0=GENERIC, 1=INTEGER, 2=QUANTIZATION, 3=NORMALS)");
+        }
+        
+        Console.WriteLine($"Buffer position after encoder types: {buffer.DecodedSize}");
+        Console.WriteLine($"This is where attribute 0's portable data should start");
+    }
+    
+    #endregion
 }
