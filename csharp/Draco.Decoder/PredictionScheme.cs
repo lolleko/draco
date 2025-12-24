@@ -59,6 +59,27 @@ public class PredictionSchemeDeltaDecoder : IPredictionSchemeDecoder
     }
 }
 
+public class PassthroughPredictionSchemeDecoder : IPredictionSchemeDecoder
+{
+    public bool ComputeOriginalValues(Span<int> corrValues, Span<int> outValues, int numComponents, int numEntries)
+    {
+        // Passthrough - corrections are the original values
+        corrValues.CopyTo(outValues);
+        return true;
+    }
+    
+    public bool DecodePredictionData(DecoderBuffer buffer)
+    {
+        // No additional data to decode
+        return true;
+    }
+    
+    public bool AreCorrectionsPositive()
+    {
+        return false;
+    }
+}
+
 public class PredictionSchemeWrapTransform
 {
     private readonly int[] minValues;

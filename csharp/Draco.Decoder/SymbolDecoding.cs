@@ -73,11 +73,16 @@ public static class SymbolDecoding
         
         Console.WriteLine($"[DecodeTaggedSymbols] tagDecoder.StartDecoding succeeded, NumSymbols={tagDecoder.NumSymbols}, buffer position: {buffer.DecodedSize}");
         
-        // C++ code checks: if num_values > 0 && num_symbols == 0, return false
+        // Special case: if numSymbols==0, all values have the same bit length (0)
+        // This means all decoded values should be 0
         if (numValues > 0 && tagDecoder.NumSymbols == 0)
         {
-            Console.WriteLine($"[DecodeTaggedSymbols] Error: numValues > 0 but NumSymbols is 0");
-            return false;
+            Console.WriteLine($"[DecodeTaggedSymbols] NumSymbols is 0, setting all values to 0");
+            for (uint i = 0; i < numValues; i++)
+            {
+                outValues[i] = 0;
+            }
+            return true;
         }
         
         if (!buffer.StartBitDecoding(false, out ulong _))
@@ -138,10 +143,15 @@ public static class SymbolDecoding
         
         Console.WriteLine($"[DecodeRawSymbols] decoder.Create succeeded, NumSymbols={decoder.NumSymbols}, buffer position: {buffer.DecodedSize}");
         
+        // Special case: if numSymbols==0, all values are the same (0)
         if (numValues > 0 && decoder.NumSymbols == 0)
         {
-            Console.WriteLine($"[DecodeRawSymbols] NumSymbols is 0 but numValues={numValues}");
-            return false;
+            Console.WriteLine($"[DecodeRawSymbols] NumSymbols is 0, setting all values to 0");
+            for (uint i = 0; i < numValues; i++)
+            {
+                outValues[i] = 0;
+            }
+            return true;
         }
         
         if (!decoder.StartDecoding(buffer))

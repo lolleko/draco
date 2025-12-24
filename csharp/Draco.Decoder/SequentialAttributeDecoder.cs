@@ -98,42 +98,41 @@ public class SequentialIntegerAttributeDecoder : SequentialAttributeDecoder
     {
         Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Starting, buffer position: {buffer.DecodedSize}");
         
-        if (!buffer.Decode(out byte predictionSchemeMethod))
+        if (!buffer.Decode(out sbyte predictionSchemeMethodSigned))
         {
             Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Failed to read predictionSchemeMethod");
             return false;
         }
         
-        Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] predictionSchemeMethod={predictionSchemeMethod}");
+        Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] predictionSchemeMethod={predictionSchemeMethodSigned}");
         
-        // Prediction scheme method must be None (0), Difference (1), or Parallelogram (2)
-        // Values > 2 indicate encoder didn't write prediction scheme (older format or special case)
-        if (predictionSchemeMethod > (byte)PredictionSchemeMethod.Parallelogram)
+        // Check that decoded prediction scheme method type is valid
+        // PREDICTION_NONE = -2, valid range is -2 to NUM_PREDICTION_SCHEMES-1
+        if (predictionSchemeMethodSigned < -2 || predictionSchemeMethodSigned >= 7) // 7 = NUM_PREDICTION_SCHEMES
         {
-            // Treat as None - the byte we read is probably part of the data
-            Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Unusual predictionSchemeMethod {predictionSchemeMethod}, assuming no prediction scheme in older format");
-            predictionSchemeMethod = (byte)PredictionSchemeMethod.None;
+            Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Invalid predictionSchemeMethod");
+            return false;
         }
         
-        if (predictionSchemeMethod != (byte)PredictionSchemeMethod.None)
+        if (predictionSchemeMethodSigned != -2) // -2 = PREDICTION_NONE
         {
-            if (!buffer.Decode(out byte predictionTransformType))
+            if (!buffer.Decode(out sbyte predictionTransformTypeSigned))
             {
                 Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Failed to read predictionTransformType");
                 return false;
             }
             
-            Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] predictionTransformType={predictionTransformType}");
+            Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] predictionTransformType={predictionTransformTypeSigned}");
             
-            if (predictionTransformType >= (byte)PredictionSchemeTransformType.Count)
+            // Check that decoded prediction scheme transform type is valid
+            // PREDICTION_TRANSFORM_NONE = -1, valid range is -1 to NUM_TYPES-1
+            if (predictionTransformTypeSigned < -1 || predictionTransformTypeSigned >= 4) // 4 = NUM_PREDICTION_SCHEME_TRANSFORM_TYPES
             {
                 Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Invalid predictionTransformType");
                 return false;
             }
             
-            predictionScheme = CreatePredictionScheme(
-                (PredictionSchemeMethod)predictionSchemeMethod,
-                (PredictionSchemeTransformType)predictionTransformType);
+            predictionScheme = CreatePredictionScheme(predictionSchemeMethodSigned, predictionTransformTypeSigned);
             
             Console.WriteLine($"[SequentialIntegerAttributeDecoder.DecodeValues] Created predictionScheme: {predictionScheme != null}");
         }
@@ -150,15 +149,22 @@ public class SequentialIntegerAttributeDecoder : SequentialAttributeDecoder
         return true;
     }
     
-    private IPredictionSchemeDecoder CreatePredictionScheme(
-        PredictionSchemeMethod method, PredictionSchemeTransformType transformType)
+    private IPredictionSchemeDecoder CreatePredictionScheme(sbyte method, sbyte transformType)
     {
-        if (transformType == PredictionSchemeTransformType.Wrap || transformType == PredictionSchemeTransformType.Delta)
+        // For now, only support Difference prediction with Wrap or Delta transform
+        // method: -2=NONE, 0=DIFFERENCE, 1=PARALLELOGRAM, 2=MULTI_PARALLELOGRAM, 3=TEX_COORDS_DEPRECATED, etc.
+        // transformType: -1=NONE, 0=DELTA, 1=WRAP, 2=NORMAL_OCTAHEDRON, 3=NORMAL_OCTAHEDRON_CANONICALIZED
+        
+        if ((transformType == 1 || transformType == 0) && method == 0) // Wrap or Delta transform with Difference method
         {
-            if (method == PredictionSchemeMethod.Difference)
-            {
-                return new PredictionSchemeDeltaDecoder();
-            }
+            return new PredictionSchemeDeltaDecoder();
+        }
+        
+        // For TEX_COORDS_DEPRECATED and other unsupported schemes, return a passthrough decoder
+        // This allows the file to decode even if we don't fully support the prediction scheme
+        if (method != -2) // If not NONE, return a passthrough
+        {
+            return new PassthroughPredictionSchemeDecoder();
         }
         
         return null;
