@@ -1,0 +1,71 @@
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio / MSBuild
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+[Tt]est[Rr]esult*/
+[Dd]ebug[Pp]ublic/
+[Rr]elease[Pp]ublic/
+*.dbmdl
+*.dbproj.schemaview
+*.jfm
+*.pfx
+*.publishsettings
+
+## NuGet
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nupkg
+*.snupkg
+**/nuget.exe
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## .NET / Roslyn
+*.dll
+*.exe
+*.pdb
+*.cache
+*.ilk
+*.log
+*.lib
+*.sbr
+*.opensdf
+*.opendb
+*.sdf
+*.ipdb
+*.iobj
+
+## Rider / JetBrains
+.idea/
+*.sln.iml
+
+## User-specific
+*.DotSettings.user
+
+## Build output
+publish/
+launchSettings.json
+
+## Code coverage
+*.coverage
+*.coveragexml
+coverage/
